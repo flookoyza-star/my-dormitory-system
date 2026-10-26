@@ -125,12 +125,30 @@
           { name: '1. ค่าเช่าห้องพัก', units: '1 เดือน', rate: Number(bill.rent).toLocaleString(), amount: Number(bill.rent) },
           { name: `2. ค่าไฟฟ้า (เลขเดิม ${bill.prevElectricMeter} - เลขใหม่ ${bill.currElectricMeter})`, units: `${bill.electricUnits} หน่วย`, rate: `${bill.electricRate} ฿`, amount: Number(bill.electricAmount) },
           { name: `3. ค่าน้ำประปา (เลขเดิม ${bill.prevWaterMeter} - เลขใหม่ ${bill.currWaterMeter})`, units: `${bill.waterUnits} หน่วย`, rate: `${bill.waterRate} ฿`, amount: Number(bill.waterAmount) },
-          { name: '4. ค่าส่วนกลาง', units: '1 เดือน', rate: Number(bill.commonFee || 0).toLocaleString(), amount: Number(bill.commonFee || 0) },
         ];
+
+        let itemIndex = 4;
+        if (bill.commonFee > 0) {
+          items.push({
+            name: `${itemIndex++}. ค่าส่วนกลาง`,
+            units: '1 เดือน',
+            rate: Number(bill.commonFee).toLocaleString(),
+            amount: Number(bill.commonFee)
+          });
+        }
+
+        if (bill.parkingFee > 0) {
+          items.push({
+            name: `${itemIndex++}. ค่าที่จอดรถ${bill.licensePlate ? ' (ทะเบียน ' + bill.licensePlate + ')' : ''}`,
+            units: '1 คัน',
+            rate: Number(bill.parkingFee).toLocaleString(),
+            amount: Number(bill.parkingFee)
+          });
+        }
 
         if (bill.otherFee > 0) {
           items.push({
-            name: `5. ค่าใช้จ่ายอื่นๆ (${bill.otherFeeRemark || 'เพิ่มเติม'})`,
+            name: `${itemIndex++}. ค่าใช้จ่ายอื่นๆ (${bill.otherFeeRemark || 'เพิ่มเติม'})`,
             units: '1 รายการ',
             rate: '-',
             amount: Number(bill.otherFee)

@@ -118,20 +118,29 @@ function buildBillFlexMessage(dormSettings, bill, publicUrl = '') {
               ]
             },
             // Common fee
-            {
+            ...(bill.commonFee > 0 ? [{
               type: "box",
               layout: "horizontal",
               contents: [
                 { type: "text", text: "4. ค่าส่วนกลาง", size: "sm", color: "#334155" },
-                { type: "text", text: `${Number(bill.commonFee || 0).toLocaleString()} ฿`, size: "sm", align: "end", weight: "bold" }
+                { type: "text", text: `${Number(bill.commonFee).toLocaleString()} ฿`, size: "sm", align: "end", weight: "bold" }
               ]
-            },
+            }] : []),
+            // Parking fee
+            ...(bill.parkingFee > 0 ? [{
+              type: "box",
+              layout: "horizontal",
+              contents: [
+                { type: "text", text: `5. ค่าที่จอดรถ${bill.licensePlate ? ' (' + bill.licensePlate + ')' : ''}`, size: "sm", color: "#334155" },
+                { type: "text", text: `${Number(bill.parkingFee).toLocaleString()} ฿`, size: "sm", align: "end", weight: "bold" }
+              ]
+            }] : []),
             // Other fee if any
             ...(bill.otherFee > 0 ? [{
               type: "box",
               layout: "horizontal",
               contents: [
-                { type: "text", text: `5. อื่นๆ (${bill.otherFeeRemark || 'เพิ่มเติม'})`, size: "xs", color: "#64748b" },
+                { type: "text", text: `6. อื่นๆ (${bill.otherFeeRemark || 'เพิ่มเติม'})`, size: "xs", color: "#64748b" },
                 { type: "text", text: `${Number(bill.otherFee).toLocaleString()} ฿`, size: "sm", align: "end", weight: "bold" }
               ]
             }] : []),

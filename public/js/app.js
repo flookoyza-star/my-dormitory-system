@@ -4,7 +4,10 @@ let state = {
   bills: [],
   settings: {},
   currentTab: 'dashboard',
-  editingRoomId: null
+  editingRoomId: null,
+  roomViewMode: 'card',    // 'card' or 'table'
+  meterViewMode: 'table',  // 'table' or 'card'
+  billViewMode: 'table'    // 'table' or 'card'
 };
 
 // Initialize on DOM ready
@@ -22,7 +25,10 @@ function setupBillingMonthDefaults() {
   const now = new Date();
   const thMonth = now.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   const meterMonthInput = document.getElementById('meterBillingMonth');
-  if (meterMonthInput) meterMonthInput.value = thMonth;
+  if (meterMonthInput) {
+    meterMonthInput.value = thMonth;
+    meterMonthInput.addEventListener('input', () => renderMeter());
+  }
 
   const billMonthInput = document.getElementById('formBillMonth');
   if (billMonthInput) billMonthInput.value = thMonth;
@@ -60,9 +66,9 @@ function switchTab(tabId) {
   // Update title
   const titles = {
     dashboard: ['ภาพรวมหอพัก', 'สถิติห้องพัก ยอดค้างชำระ และข้อมูลล่าสุด'],
-    rooms: ['จัดการห้องพัก & ข้อมูลผู้เช่า', 'เพิ่ม แก้ไข ลบข้อมูลห้องพักและรายละเอียดผู้เช่า'],
-    meter: ['จดมิเตอร์น้ำ - ไฟ', 'บันทึกหน่วยน้ำไฟประจำเดือน และสร้างบิลอัตโนมัติ'],
-    bills: ['ออกบิล & ส่งการแจ้งเตือน LINE', 'รายการใบแจ้งหนี้ ตรวจสอบการชำระ และส่ง Flex Message เข้า LINE'],
+    rooms: ['จัดการห้องพัก & ข้อมูลผู้เช่า', 'เพิ่ม แก้ไข ลบข้อมูลห้องพักและรายละเอียดผู้เช่า พร้อมค่าส่วนกลางและที่จอดรถ'],
+    meter: ['จดมิเตอร์น้ำ - ไฟ & คำนวณบิล', 'ดึงเลขมิเตอร์รอบก่อนอัตโนมัติ บันทึกหน่วยน้ำไฟ และสร้างบิลได้ในคลิกเดียว'],
+    bills: ['ออกบิล & ส่งการแจ้งเตือน LINE', 'รายการใบแจ้งหนี้ ตรวจสอบการชำระเงิน และส่ง Flex Message เข้า LINE ผู้เช่า'],
     settings: ['ตั้งค่าหอพัก & ระบบ LINE Bot', 'กำหนดราคาค่าน้ำ ค่าไฟ และเชื่อมต่อ LINE Messaging API']
   };
 
@@ -70,11 +76,102 @@ function switchTab(tabId) {
   document.getElementById('pageSubtitle').innerText = titles[tabId][1];
 
   if (tabId === 'dashboard') loadDashboard();
-  if (tabId === 'rooms') renderRoomsTable();
-  if (tabId === 'meter') renderMeterTable();
-  if (tabId === 'bills') renderBillsTable();
+  if (tabId === 'rooms') renderRooms();
+  if (tabId === 'meter') renderMeter();
+  if (tabId === 'bills') renderBills();
 
   setTimeout(() => lucide.createIcons(), 50);
+}
+
+// ----------------------------------------------------
+// VIEW MODE TOGGLES (Card vs Table)
+// ----------------------------------------------------
+function setRoomViewMode(mode) {
+  state.roomViewMode = mode;
+  const btnCard = document.getElementById('btnRoomViewCard');
+  const btnTable = document.getElementById('btnRoomViewTable');
+  const tableCont = document.getElementById('roomsTableContainer');
+  const cardCont = document.getElementById('roomsCardContainer');
+
+  if (mode === 'card') {
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    tableCont.classList.add('hidden');
+    cardCont.classList.remove('hidden');
+  } else {
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    cardCont.classList.add('hidden');
+    tableCont.classList.remove('hidden');
+  }
+  renderRooms();
+}
+
+function setMeterViewMode(mode) {
+  state.meterViewMode = mode;
+  const btnTable = document.getElementById('btnMeterViewTable');
+  const btnCard = document.getElementById('btnMeterViewCard');
+  const tableCont = document.getElementById('meterTableContainer');
+  const cardCont = document.getElementById('meterCardContainer');
+
+  if (mode === 'card') {
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    tableCont.classList.add('hidden');
+    cardCont.classList.remove('hidden');
+  } else {
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    cardCont.classList.add('hidden');
+    tableCont.classList.remove('hidden');
+  }
+  renderMeter();
+}
+
+function setBillViewMode(mode) {
+  state.billViewMode = mode;
+  const btnTable = document.getElementById('btnBillViewTable');
+  const btnCard = document.getElementById('btnBillViewCard');
+  const tableCont = document.getElementById('billsTableContainer');
+  const cardCont = document.getElementById('billsCardContainer');
+
+  if (mode === 'card') {
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    tableCont.classList.add('hidden');
+    cardCont.classList.remove('hidden');
+  } else {
+    btnTable.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm';
+    btnCard.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900';
+    cardCont.classList.add('hidden');
+    tableCont.classList.remove('hidden');
+  }
+  renderBills();
+}
+
+// Dynamic Remark Input Toggles
+function toggleRoomOtherRemark() {
+  const fee = Number(document.getElementById('formRoomOtherFee')?.value || 0);
+  const group = document.getElementById('roomOtherRemarkGroup');
+  if (group) {
+    if (fee > 0) {
+      group.classList.remove('hidden');
+    } else {
+      group.classList.add('hidden');
+    }
+  }
+}
+
+function toggleBillOtherRemark() {
+  const fee = Number(document.getElementById('formBillOtherFee')?.value || 0);
+  const group = document.getElementById('billOtherRemarkGroup');
+  if (group) {
+    if (fee > 0) {
+      group.classList.remove('hidden');
+    } else {
+      group.classList.add('hidden');
+    }
+  }
 }
 
 // ----------------------------------------------------
@@ -124,7 +221,7 @@ function renderQuickRoomGrid() {
           <span class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-white/70">${statusText}</span>
         </div>
         <div class="mt-2 text-xs">
-          <p class="font-semibold text-slate-700">${room.tenant ? room.tenant.name : '—'}</p>
+          <p class="font-semibold text-slate-700 truncate">${room.tenant ? room.tenant.name : '—'}</p>
           <p class="text-[11px] opacity-75">${Number(room.price).toLocaleString()} ฿/ด.</p>
         </div>
       </div>
@@ -141,7 +238,7 @@ async function loadRooms() {
     const result = await res.json();
     if (result.success) {
       state.rooms = result.data;
-      renderRoomsTable();
+      renderRooms();
       renderQuickRoomGrid();
     }
   } catch (err) {
@@ -149,25 +246,30 @@ async function loadRooms() {
   }
 }
 
-function renderRoomsTable() {
+function renderRooms() {
   const tbody = document.getElementById('roomsTableBody');
-  if (!tbody) return;
+  const cardContainer = document.getElementById('roomsCardContainer');
+  if (!tbody || !cardContainer) return;
 
   const search = (document.getElementById('roomSearchInput')?.value || '').toLowerCase();
   const filter = document.getElementById('roomStatusFilter')?.value || 'all';
 
   const filtered = state.rooms.filter(room => {
     const matchSearch = room.number.toLowerCase().includes(search) ||
-      (room.tenant && room.tenant.name.toLowerCase().includes(search));
+      (room.tenant && room.tenant.name.toLowerCase().includes(search)) ||
+      (room.licensePlate && room.licensePlate.toLowerCase().includes(search));
     const matchStatus = filter === 'all' || room.status === filter;
     return matchSearch && matchStatus;
   });
 
+  // Empty state
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">ไม่พบห้องพักตามเงื่อนไข</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400">ไม่พบห้องพักตามเงื่อนไข</td></tr>`;
+    cardContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">ไม่พบห้องพักตามเงื่อนไข</div>`;
     return;
   }
 
+  // Render Table View
   tbody.innerHTML = filtered.map(room => {
     let badge = `<span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">มีผู้เช่า</span>`;
     if (room.status === 'vacant') badge = `<span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">ว่าง</span>`;
@@ -175,20 +277,33 @@ function renderRoomsTable() {
 
     const tenant = room.tenant || {};
     const lineBadge = tenant.lineUserId 
-      ? `<span class="font-mono text-[10px] text-emerald-600 font-medium truncate max-w-[120px] block" title="${tenant.lineUserId}">✓ เชื่อมแล้ว (${tenant.lineUserId.slice(0, 8)}...)</span>`
+      ? `<span class="font-mono text-[10px] text-emerald-600 font-medium truncate max-w-[100px] block" title="${tenant.lineUserId}">✓ เชื่อมแล้ว</span>`
       : `<span class="text-[11px] text-slate-400">ยังไม่ระบุ</span>`;
+
+    const parkingInfo = room.parkingFee > 0
+      ? `<div><span class="font-semibold text-slate-700">${Number(room.parkingFee).toLocaleString()} ฿</span>${room.licensePlate ? `<span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 block mt-0.5">${room.licensePlate}</span>` : ''}</div>`
+      : `<span class="text-slate-400 text-xs">-</span>`;
+
+    const otherInfo = room.otherFee > 0
+      ? `<div><span class="font-semibold text-slate-700">${Number(room.otherFee).toLocaleString()} ฿</span>${room.otherFeeRemark ? `<span class="text-[10px] text-slate-500 block truncate max-w-[100px]" title="${room.otherFeeRemark}">(${room.otherFeeRemark})</span>` : ''}</div>`
+      : `<span class="text-slate-400 text-xs">-</span>`;
 
     return `
       <tr class="hover:bg-slate-50 transition">
-        <td class="px-6 py-4 font-bold text-slate-800">ห้อง ${room.number}</td>
-        <td class="px-6 py-4">${room.type || 'มาตรฐาน'} (ชั้น ${room.floor || 1})</td>
-        <td class="px-6 py-4 font-semibold text-slate-700">${Number(room.price).toLocaleString()} ฿</td>
-        <td class="px-6 py-4">${badge}</td>
-        <td class="px-6 py-4 font-medium text-slate-800">${tenant.name || '—'}</td>
-        <td class="px-6 py-4 text-xs">${tenant.phone || '—'}</td>
-        <td class="px-6 py-4">${lineBadge}</td>
-        <td class="px-6 py-4 text-center">
-          <div class="flex items-center justify-center gap-2">
+        <td class="px-5 py-4 font-bold text-slate-800 text-base">ห้อง ${room.number}</td>
+        <td class="px-5 py-4 text-xs">${room.type || 'มาตรฐาน'} (ชั้น ${room.floor || 1})</td>
+        <td class="px-5 py-4 font-semibold text-slate-700">${Number(room.price).toLocaleString()} ฿</td>
+        <td class="px-5 py-4 text-xs">${Number(room.commonFee || 0).toLocaleString()} ฿</td>
+        <td class="px-5 py-4 text-xs">${parkingInfo}</td>
+        <td class="px-5 py-4 text-xs">${otherInfo}</td>
+        <td class="px-5 py-4">${badge}</td>
+        <td class="px-5 py-4">
+          <p class="font-medium text-slate-800 text-xs">${tenant.name || '—'}</p>
+          <p class="text-[11px] text-slate-400">${tenant.phone || ''}</p>
+        </td>
+        <td class="px-5 py-4">${lineBadge}</td>
+        <td class="px-5 py-4 text-center">
+          <div class="flex items-center justify-center gap-1.5">
             <button onclick="openEditRoomModal('${room.number}')" class="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition" title="แก้ไข">
               <i data-lucide="edit-2" class="w-4 h-4"></i>
             </button>
@@ -198,6 +313,98 @@ function renderRoomsTable() {
           </div>
         </td>
       </tr>
+    `;
+  }).join('');
+
+  // Render Card View
+  cardContainer.innerHTML = filtered.map(room => {
+    let borderClass = 'border-slate-200';
+    let statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">มีผู้เช่า</span>`;
+    if (room.status === 'vacant') {
+      statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">ห้องว่าง</span>`;
+    } else if (room.status === 'maintenance') {
+      borderClass = 'border-amber-200';
+      statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">ซ่อมบำรุง</span>`;
+    }
+
+    const tenant = room.tenant || {};
+    const lineBadge = tenant.lineUserId 
+      ? `<span class="text-[10px] text-emerald-600 font-semibold flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> มี LINE ID</span>`
+      : `<span class="text-[10px] text-slate-400">ยังไม่มี LINE ID</span>`;
+
+    return `
+      <div class="bg-white rounded-2xl border ${borderClass} shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between space-y-4">
+        <div>
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <span class="text-xs font-semibold text-blue-600">ชั้น ${room.floor || 1} • ${room.type || 'มาตรฐาน'}</span>
+              <h3 class="text-xl font-bold text-slate-800">ห้อง ${room.number}</h3>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <!-- Price & Fixed Charges breakdown -->
+          <div class="mt-3 bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs text-slate-600">
+            <div class="flex justify-between items-center">
+              <span>ค่าเช่าห้อง:</span>
+              <span class="font-bold text-slate-800 text-sm">${Number(room.price).toLocaleString()} ฿/ด.</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>ค่าส่วนกลาง:</span>
+              <span class="font-medium text-slate-700">${Number(room.commonFee || 0).toLocaleString()} ฿</span>
+            </div>
+            ${room.parkingFee > 0 ? `
+              <div class="flex justify-between items-center text-indigo-700">
+                <span class="flex items-center gap-1"><i data-lucide="car" class="w-3.5 h-3.5"></i> ที่จอดรถ ${room.licensePlate ? `(${room.licensePlate})` : ''}:</span>
+                <span class="font-semibold">${Number(room.parkingFee).toLocaleString()} ฿</span>
+              </div>
+            ` : ''}
+            ${room.otherFee > 0 ? `
+              <div class="flex justify-between items-center text-amber-700">
+                <span>อื่นๆ (${room.otherFeeRemark || 'เพิ่มเติม'}):</span>
+                <span class="font-semibold">${Number(room.otherFee).toLocaleString()} ฿</span>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Tenant section -->
+          <div class="mt-3 pt-2 border-t border-slate-100 text-xs">
+            ${room.status === 'occupied' && tenant.name ? `
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <p class="font-semibold text-slate-800 flex items-center gap-1">
+                    <i data-lucide="user" class="w-3.5 h-3.5 text-blue-600"></i> ${tenant.name}
+                  </p>
+                  ${lineBadge}
+                </div>
+                <p class="text-slate-500 text-[11px] flex items-center gap-1">
+                  <i data-lucide="phone" class="w-3 h-3"></i> ${tenant.phone || 'ไม่ระบุเบอร์'}
+                </p>
+              </div>
+            ` : `
+              <p class="text-slate-400 italic flex items-center gap-1">
+                <i data-lucide="info" class="w-3.5 h-3.5"></i> ยังไม่มีผู้เช่าในห้องนี้
+              </p>
+            `}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-between border-t border-slate-100 pt-3">
+          <div class="text-[11px] text-slate-400">
+            มิเตอร์เดิม: ไฟ ${room.lastElectricMeter || 0} / น้ำ ${room.lastWaterMeter || 0}
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="openEditRoomModal('${room.number}')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-semibold transition flex items-center gap-1">
+              <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> แก้ไข
+            </button>
+            <button onclick="deleteRoom('${room.number}')" class="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition" title="ลบ">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -212,6 +419,11 @@ function openAddRoomModal() {
   document.getElementById('formRoomFloor').value = '1';
   document.getElementById('formRoomType').value = 'แอร์';
   document.getElementById('formRoomPrice').value = '4500';
+  document.getElementById('formRoomCommonFee').value = state.settings.commonFeeDefault || 300;
+  document.getElementById('formRoomParkingFee').value = '0';
+  document.getElementById('formRoomLicensePlate').value = '';
+  document.getElementById('formRoomOtherFee').value = '0';
+  document.getElementById('formRoomOtherRemark').value = '';
   document.getElementById('formRoomStatus').value = 'occupied';
   document.getElementById('formTenantName').value = '';
   document.getElementById('formTenantPhone').value = '';
@@ -219,6 +431,7 @@ function openAddRoomModal() {
   document.getElementById('formLastElecMeter').value = '0';
   document.getElementById('formLastWaterMeter').value = '0';
   toggleTenantFields();
+  toggleRoomOtherRemark();
   document.getElementById('roomModal').classList.remove('hidden');
 }
 
@@ -233,6 +446,11 @@ function openEditRoomModal(roomNumber) {
   document.getElementById('formRoomFloor').value = room.floor || 1;
   document.getElementById('formRoomType').value = room.type || '';
   document.getElementById('formRoomPrice').value = room.price || '';
+  document.getElementById('formRoomCommonFee').value = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
+  document.getElementById('formRoomParkingFee').value = room.parkingFee || 0;
+  document.getElementById('formRoomLicensePlate').value = room.licensePlate || '';
+  document.getElementById('formRoomOtherFee').value = room.otherFee || 0;
+  document.getElementById('formRoomOtherRemark').value = room.otherFeeRemark || '';
   document.getElementById('formRoomStatus').value = room.status || 'occupied';
 
   const tenant = room.tenant || {};
@@ -243,6 +461,7 @@ function openEditRoomModal(roomNumber) {
   document.getElementById('formLastWaterMeter').value = room.lastWaterMeter || 0;
 
   toggleTenantFields();
+  toggleRoomOtherRemark();
   document.getElementById('roomModal').classList.remove('hidden');
 }
 
@@ -266,6 +485,11 @@ async function saveRoomForm(e) {
   const floor = Number(document.getElementById('formRoomFloor').value);
   const type = document.getElementById('formRoomType').value.trim();
   const price = Number(document.getElementById('formRoomPrice').value);
+  const commonFee = Number(document.getElementById('formRoomCommonFee').value || 0);
+  const parkingFee = Number(document.getElementById('formRoomParkingFee').value || 0);
+  const licensePlate = document.getElementById('formRoomLicensePlate').value.trim();
+  const otherFee = Number(document.getElementById('formRoomOtherFee').value || 0);
+  const otherFeeRemark = document.getElementById('formRoomOtherRemark').value.trim();
   const status = document.getElementById('formRoomStatus').value;
 
   const tenantName = document.getElementById('formTenantName').value.trim();
@@ -280,6 +504,11 @@ async function saveRoomForm(e) {
     floor,
     type,
     price,
+    commonFee,
+    parkingFee,
+    licensePlate,
+    otherFee,
+    otherFeeRemark,
     status,
     tenant: status === 'occupied' ? {
       name: tenantName,
@@ -329,79 +558,245 @@ async function deleteRoom(roomNumber) {
 // ----------------------------------------------------
 // 3. METER RECORDING & QUICK BILL
 // ----------------------------------------------------
-function renderMeterTable() {
+function renderMeter() {
   const tbody = document.getElementById('meterEntryTableBody');
-  if (!tbody) return;
+  const cardContainer = document.getElementById('meterCardContainer');
+  if (!tbody || !cardContainer) return;
 
   const occupiedRooms = state.rooms.filter(r => r.status === 'occupied');
   if (occupiedRooms.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400">ยังไม่มีห้องที่มีผู้เช่า</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-8 text-slate-400">ยังไม่มีห้องที่มีผู้เช่า</td></tr>`;
+    cardContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">ยังไม่มีห้องที่มีผู้เช่า</div>`;
     return;
   }
 
+  const elecRate = Number(state.settings.electricRate || 8);
+  const waterRate = Number(state.settings.waterRate || 18);
+
+  // Render Table View
   tbody.innerHTML = occupiedRooms.map(room => {
+    const prevElec = room.lastElectricMeter || 0;
+    const prevWater = room.lastWaterMeter || 0;
+    const commonFee = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
+    const parkingFee = room.parkingFee || 0;
+    const otherFee = room.otherFee || 0;
+
     return `
-      <tr id="meter-row-${room.number}" class="hover:bg-slate-50">
-        <td class="px-4 py-3 font-bold text-slate-800">ห้อง ${room.number}</td>
-        <td class="px-4 py-3 text-xs font-medium text-slate-700">${room.tenant?.name || '—'}</td>
-        <td class="px-4 py-3">
-          <input type="number" id="m-prev-elec-${room.number}" value="${room.lastElectricMeter || 0}" readonly class="w-20 bg-slate-100 border border-slate-200 rounded px-2 py-1 text-xs text-slate-600">
+      <tr id="meter-row-${room.number}" class="hover:bg-slate-50 transition">
+        <td class="px-3 py-3">
+          <p class="font-bold text-slate-800 text-sm">ห้อง ${room.number}</p>
+          <p class="text-[11px] text-slate-500">${room.tenant?.name || '—'}</p>
         </td>
-        <td class="px-4 py-3">
-          <input type="number" id="m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-24 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500">
+
+        <!-- Elec prev & curr -->
+        <td class="px-3 py-3 text-xs font-mono text-slate-600 bg-slate-50/50">
+          <input type="number" id="m-prev-elec-${room.number}" value="${prevElec}" readonly class="w-16 bg-transparent border-0 font-mono text-xs text-slate-500">
         </td>
-        <td class="px-4 py-3 font-bold text-amber-600 text-xs" id="m-diff-elec-${room.number}">0 หน่วย</td>
-        <td class="px-4 py-3">
-          <input type="number" id="m-prev-water-${room.number}" value="${room.lastWaterMeter || 0}" readonly class="w-20 bg-slate-100 border border-slate-200 rounded px-2 py-1 text-xs text-slate-600">
+        <td class="px-3 py-3">
+          <input type="number" id="m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500">
         </td>
-        <td class="px-4 py-3">
-          <input type="number" id="m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-24 border border-cyan-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-500">
+        <td class="px-3 py-3 font-bold text-amber-600 text-xs" id="m-diff-elec-${room.number}">0 น.</td>
+
+        <!-- Water prev & curr -->
+        <td class="px-3 py-3 text-xs font-mono text-slate-600 bg-slate-50/50">
+          <input type="number" id="m-prev-water-${room.number}" value="${prevWater}" readonly class="w-16 bg-transparent border-0 font-mono text-xs text-slate-500">
         </td>
-        <td class="px-4 py-3 font-bold text-cyan-600 text-xs" id="m-diff-water-${room.number}">0 หน่วย</td>
-        <td class="px-4 py-3 text-center">
-          <button onclick="createBillFromMeter('${room.number}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+        <td class="px-3 py-3">
+          <input type="number" id="m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-cyan-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-500">
+        </td>
+        <td class="px-3 py-3 font-bold text-cyan-600 text-xs" id="m-diff-water-${room.number}">0 น.</td>
+
+        <!-- Other charges -->
+        <td class="px-3 py-3 text-xs">
+          <input type="number" id="m-rent-${room.number}" value="${room.price || 4500}" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+        <td class="px-3 py-3 text-xs">
+          <input type="number" id="m-common-${room.number}" value="${commonFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+        <td class="px-3 py-3 text-xs">
+          <input type="number" id="m-parking-${room.number}" value="${parkingFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+        <td class="px-3 py-3 text-xs">
+          <input type="number" id="m-other-${room.number}" value="${otherFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+
+        <!-- Estimated Total -->
+        <td class="px-3 py-3 font-bold text-blue-600 text-sm whitespace-nowrap" id="m-total-${room.number}">
+          ${(Number(room.price || 0) + commonFee + parkingFee + otherFee).toLocaleString()} ฿
+        </td>
+
+        <!-- Create Button -->
+        <td class="px-3 py-3 text-center">
+          <button onclick="createBillFromMeterRow('${room.number}')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition whitespace-nowrap">
             สร้างบิล
           </button>
         </td>
       </tr>
     `;
   }).join('');
+
+  // Render Card View
+  cardContainer.innerHTML = occupiedRooms.map(room => {
+    const prevElec = room.lastElectricMeter || 0;
+    const prevWater = room.lastWaterMeter || 0;
+    const commonFee = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
+    const parkingFee = room.parkingFee || 0;
+    const otherFee = room.otherFee || 0;
+
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:shadow-md transition">
+        <!-- Room Info -->
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div>
+            <h4 class="font-bold text-slate-800 text-lg">ห้อง ${room.number}</h4>
+            <p class="text-xs text-slate-500 font-medium">${room.tenant?.name || '—'}</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg" id="card-m-total-${room.number}">
+            ${(Number(room.price || 0) + commonFee + parkingFee + otherFee).toLocaleString()} ฿
+          </span>
+        </div>
+
+        <!-- Meter inputs -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Elec box -->
+          <div class="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-bold text-amber-800">
+              <span class="flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5 text-amber-600"></i> ไฟฟ้า</span>
+              <span class="text-[10px] text-slate-400">เดิม: ${prevElec}</span>
+            </div>
+            <input type="number" id="card-m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="syncMeterCardToRow('${room.number}', 'elec')" class="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-amber-500">
+            <p class="text-[11px] text-amber-700 font-semibold" id="card-m-diff-elec-${room.number}">0 หน่วย</p>
+          </div>
+
+          <!-- Water box -->
+          <div class="p-3 bg-cyan-50/60 border border-cyan-200/60 rounded-xl space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-bold text-cyan-800">
+              <span class="flex items-center gap-1"><i data-lucide="droplet" class="w-3.5 h-3.5 text-cyan-600"></i> น้ำประปา</span>
+              <span class="text-[10px] text-slate-400">เดิม: ${prevWater}</span>
+            </div>
+            <input type="number" id="card-m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="syncMeterCardToRow('${room.number}', 'water')" class="w-full bg-white border border-cyan-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-cyan-500">
+            <p class="text-[11px] text-cyan-700 font-semibold" id="card-m-diff-water-${room.number}">0 หน่วย</p>
+          </div>
+        </div>
+
+        <!-- Charges Summary -->
+        <div class="text-xs bg-slate-50 p-3 rounded-xl space-y-1 text-slate-600">
+          <div class="flex justify-between">
+            <span>ค่าห้อง:</span>
+            <span class="font-semibold text-slate-800">${Number(room.price).toLocaleString()} ฿</span>
+          </div>
+          <div class="flex justify-between">
+            <span>ส่วนกลาง:</span>
+            <span>${Number(commonFee).toLocaleString()} ฿</span>
+          </div>
+          ${parkingFee > 0 ? `
+            <div class="flex justify-between text-indigo-700">
+              <span>ที่จอดรถ ${room.licensePlate ? `(${room.licensePlate})` : ''}:</span>
+              <span class="font-semibold">${Number(parkingFee).toLocaleString()} ฿</span>
+            </div>
+          ` : ''}
+          ${otherFee > 0 ? `
+            <div class="flex justify-between text-amber-700">
+              <span>อื่นๆ (${room.otherFeeRemark || ''}):</span>
+              <span class="font-semibold">${Number(otherFee).toLocaleString()} ฿</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Submit Button -->
+        <button onclick="createBillFromMeterCard('${room.number}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center justify-center gap-2">
+          <i data-lucide="receipt" class="w-4 h-4"></i> ออกบิลห้อง ${room.number}
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  lucide.createIcons();
 }
 
 function updateMeterRowCalc(roomNumber) {
-  const prevElec = Number(document.getElementById(`m-prev-elec-${roomNumber}`).value || 0);
-  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`).value || 0);
-  const diffElec = Math.max(0, currElec - prevElec);
-  document.getElementById(`m-diff-elec-${roomNumber}`).innerText = `${diffElec} หน่วย`;
+  const room = state.rooms.find(r => r.number === String(roomNumber));
+  if (!room) return;
 
-  const prevWater = Number(document.getElementById(`m-prev-water-${roomNumber}`).value || 0);
-  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`).value || 0);
+  const elecRate = Number(state.settings.electricRate || 8);
+  const waterRate = Number(state.settings.waterRate || 18);
+
+  const prevElec = Number(document.getElementById(`m-prev-elec-${roomNumber}`)?.value || room.lastElectricMeter || 0);
+  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`)?.value || prevElec);
+  const diffElec = Math.max(0, currElec - prevElec);
+  const elecAmount = Math.round(diffElec * elecRate);
+  const diffElecEl = document.getElementById(`m-diff-elec-${roomNumber}`);
+  if (diffElecEl) diffElecEl.innerText = `${diffElec} น. (${elecAmount}฿)`;
+
+  const prevWater = Number(document.getElementById(`m-prev-water-${roomNumber}`)?.value || room.lastWaterMeter || 0);
+  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`)?.value || prevWater);
   const diffWater = Math.max(0, currWater - prevWater);
-  document.getElementById(`m-diff-water-${roomNumber}`).innerText = `${diffWater} หน่วย`;
+  const waterAmount = Math.round(diffWater * waterRate);
+  const diffWaterEl = document.getElementById(`m-diff-water-${roomNumber}`);
+  if (diffWaterEl) diffWaterEl.innerText = `${diffWater} น. (${waterAmount}฿)`;
+
+  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || room.price || 0);
+  const common = Number(document.getElementById(`m-common-${roomNumber}`)?.value || 0);
+  const parking = Number(document.getElementById(`m-parking-${roomNumber}`)?.value || 0);
+  const other = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
+
+  const total = rent + common + parking + other + elecAmount + waterAmount;
+  const totalEl = document.getElementById(`m-total-${roomNumber}`);
+  if (totalEl) totalEl.innerText = `${total.toLocaleString()} ฿`;
+
+  // Sync to card if exists
+  const cardDiffElec = document.getElementById(`card-m-diff-elec-${roomNumber}`);
+  if (cardDiffElec) cardDiffElec.innerText = `${diffElec} หน่วย (${elecAmount} ฿)`;
+  const cardDiffWater = document.getElementById(`card-m-diff-water-${roomNumber}`);
+  if (cardDiffWater) cardDiffWater.innerText = `${diffWater} หน่วย (${waterAmount} ฿)`;
+  const cardTotal = document.getElementById(`card-m-total-${roomNumber}`);
+  if (cardTotal) cardTotal.innerText = `${total.toLocaleString()} ฿`;
 }
 
-async function createBillFromMeter(roomNumber) {
+function syncMeterCardToRow(roomNumber, type) {
+  if (type === 'elec') {
+    const val = document.getElementById(`card-m-curr-elec-${roomNumber}`).value;
+    const rowInput = document.getElementById(`m-curr-elec-${roomNumber}`);
+    if (rowInput) rowInput.value = val;
+  } else if (type === 'water') {
+    const val = document.getElementById(`card-m-curr-water-${roomNumber}`).value;
+    const rowInput = document.getElementById(`m-curr-water-${roomNumber}`);
+    if (rowInput) rowInput.value = val;
+  }
+  updateMeterRowCalc(roomNumber);
+}
+
+async function createBillFromMeterRow(roomNumber) {
   const room = state.rooms.find(r => r.number === String(roomNumber));
   if (!room) return;
 
   const month = document.getElementById('meterBillingMonth').value;
-  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`).value);
-  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`).value);
+  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`)?.value);
+  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`)?.value);
 
-  if (!currElec && currElec !== 0) {
-    alert('กรุณากรอกเลขมิเตอร์ไฟใหม่');
+  if (isNaN(currElec) || currElec === 0) {
+    alert(`กรุณากรอกเลขมิเตอร์ไฟใหม่ของห้อง ${roomNumber}`);
     return;
   }
+
+  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || room.price || 0);
+  const commonFee = Number(document.getElementById(`m-common-${roomNumber}`)?.value || 0);
+  const parkingFee = Number(document.getElementById(`m-parking-${roomNumber}`)?.value || 0);
+  const otherFee = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
 
   const billPayload = {
     roomNumber: room.number,
     month: month,
-    rent: room.price,
+    rent: rent,
     prevElectricMeter: room.lastElectricMeter || 0,
     currElectricMeter: currElec,
     prevWaterMeter: room.lastWaterMeter || 0,
     currWaterMeter: currWater,
-    commonFee: state.settings.commonFeeDefault || 300,
+    commonFee: commonFee,
+    parkingFee: parkingFee,
+    licensePlate: room.licensePlate || '',
+    otherFee: otherFee,
+    otherFeeRemark: room.otherFeeRemark || '',
     electricRate: state.settings.electricRate || 8,
     waterRate: state.settings.waterRate || 18
   };
@@ -427,6 +822,10 @@ async function createBillFromMeter(roomNumber) {
   }
 }
 
+async function createBillFromMeterCard(roomNumber) {
+  await createBillFromMeterRow(roomNumber);
+}
+
 function openMeterModal() {
   switchTab('meter');
 }
@@ -440,32 +839,36 @@ async function loadBills() {
     const result = await res.json();
     if (result.success) {
       state.bills = result.data;
-      renderBillsTable();
+      renderBills();
     }
   } catch (err) {
     console.error('Failed to load bills:', err);
   }
 }
 
-function renderBillsTable() {
+function renderBills() {
   const tbody = document.getElementById('billsTableBody');
-  if (!tbody) return;
+  const cardContainer = document.getElementById('billsCardContainer');
+  if (!tbody || !cardContainer) return;
 
   const search = (document.getElementById('billSearchInput')?.value || '').toLowerCase();
   const filter = document.getElementById('billStatusFilter')?.value || 'all';
 
   const filtered = state.bills.filter(bill => {
     const matchSearch = bill.roomNumber.toLowerCase().includes(search) ||
-      (bill.month && bill.month.toLowerCase().includes(search));
+      (bill.month && bill.month.toLowerCase().includes(search)) ||
+      (bill.licensePlate && bill.licensePlate.toLowerCase().includes(search));
     const matchStatus = filter === 'all' || bill.status === filter;
     return matchSearch && matchStatus;
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400">ยังไม่มีข้อมูลบิลในระบบ</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-slate-400">ยังไม่มีข้อมูลบิลในระบบ</td></tr>`;
+    cardContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-white rounded-2xl border border-slate-200">ยังไม่มีข้อมูลบิลในระบบ</div>`;
     return;
   }
 
+  // Render Table View
   tbody.innerHTML = filtered.map(bill => {
     const isPaid = bill.status === 'paid';
     const statusBadge = isPaid
@@ -476,51 +879,151 @@ function renderBillsTable() {
       ? `<span class="text-emerald-600 text-xs font-medium flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5"></i> ส่งแล้ว</span>`
       : `<span class="text-slate-400 text-xs font-medium">ยังไม่ส่ง</span>`;
 
+    const parkingText = bill.parkingFee > 0
+      ? `<div><span class="font-semibold text-slate-700">${Number(bill.parkingFee).toLocaleString()} ฿</span>${bill.licensePlate ? `<span class="text-[10px] text-slate-500 block">(${bill.licensePlate})</span>` : ''}</div>`
+      : `<span class="text-slate-400 text-xs">-</span>`;
+
+    const otherText = bill.otherFee > 0
+      ? `<div><span class="font-semibold text-slate-700">${Number(bill.otherFee).toLocaleString()} ฿</span>${bill.otherFeeRemark ? `<span class="text-[10px] text-slate-500 block truncate max-w-[100px]" title="${bill.otherFeeRemark}">(${bill.otherFeeRemark})</span>` : ''}</div>`
+      : `<span class="text-slate-400 text-xs">-</span>`;
+
     return `
       <tr class="hover:bg-slate-50 transition">
-        <td class="px-5 py-4">
-          <p class="font-bold text-slate-800">${bill.id}</p>
-          <p class="text-xs text-slate-400">${bill.month}</p>
+        <td class="px-4 py-4">
+          <p class="font-bold text-slate-800 text-xs">${bill.id}</p>
+          <p class="text-[11px] text-slate-400">${bill.month}</p>
         </td>
-        <td class="px-5 py-4 font-bold text-blue-600 text-base">ห้อง ${bill.roomNumber}</td>
-        <td class="px-5 py-4">${Number(bill.rent).toLocaleString()} ฿</td>
-        <td class="px-5 py-4">
+        <td class="px-4 py-4 font-bold text-blue-600 text-base">ห้อง ${bill.roomNumber}</td>
+        <td class="px-4 py-4 font-semibold text-slate-700">${Number(bill.rent).toLocaleString()} ฿</td>
+        <td class="px-4 py-4">
           <p class="font-semibold text-slate-800">${Number(bill.electricAmount).toLocaleString()} ฿</p>
-          <p class="text-[11px] text-slate-400">(${bill.electricUnits} หน่วย)</p>
+          <p class="text-[10px] text-slate-400">(${bill.electricUnits} หน่วย)</p>
         </td>
-        <td class="px-5 py-4">
+        <td class="px-4 py-4">
           <p class="font-semibold text-slate-800">${Number(bill.waterAmount).toLocaleString()} ฿</p>
-          <p class="text-[11px] text-slate-400">(${bill.waterUnits} หน่วย)</p>
+          <p class="text-[10px] text-slate-400">(${bill.waterUnits} หน่วย)</p>
         </td>
-        <td class="px-5 py-4 font-bold text-slate-900 text-base">${Number(bill.totalAmount).toLocaleString()} ฿</td>
-        <td class="px-5 py-4">
+        <td class="px-4 py-4 text-xs font-semibold text-slate-700">${Number(bill.commonFee || 0).toLocaleString()} ฿</td>
+        <td class="px-4 py-4 text-xs">${parkingText}</td>
+        <td class="px-4 py-4 text-xs">${otherText}</td>
+        <td class="px-4 py-4 font-bold text-blue-700 text-base">${Number(bill.totalAmount).toLocaleString()} ฿</td>
+        <td class="px-4 py-4">
           ${statusBadge}
           <button onclick="toggleBillStatus('${bill.id}', '${isPaid ? 'pending' : 'paid'}')" class="text-[10px] text-blue-600 underline mt-1 block">
             ${isPaid ? 'เปลี่ยนเป็นรอชำระ' : 'กดเมื่อชำระแล้ว'}
           </button>
         </td>
-        <td class="px-5 py-4">${lineBadge}</td>
-        <td class="px-5 py-4 text-center">
+        <td class="px-4 py-4">${lineBadge}</td>
+        <td class="px-4 py-4 text-center">
           <div class="flex items-center justify-center gap-1.5">
-            <!-- Send LINE button -->
             <button onclick="sendLineBill('${bill.id}')" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition" title="ส่งบิลเข้า LINE">
               <i data-lucide="send" class="w-4 h-4"></i>
             </button>
-            <!-- Print Bill button -->
             <button onclick="openPrintBill('${bill.id}')" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition" title="พิมพ์ใบแจ้งหนี้ / PDF">
               <i data-lucide="printer" class="w-4 h-4"></i>
             </button>
-            <!-- View Online Bill button -->
             <button onclick="openOnlineBill('${bill.id}')" class="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition" title="เปิดหน้า QR จ่ายเงินผู้เช่า">
               <i data-lucide="qr-code" class="w-4 h-4"></i>
             </button>
-            <!-- Delete Bill button -->
             <button onclick="deleteBill('${bill.id}')" class="p-1.5 hover:bg-rose-50 text-rose-500 rounded-lg transition" title="ลบบิล">
               <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
           </div>
         </td>
       </tr>
+    `;
+  }).join('');
+
+  // Render Card View
+  cardContainer.innerHTML = filtered.map(bill => {
+    const isPaid = bill.status === 'paid';
+    const borderClass = isPaid ? 'border-emerald-200' : 'border-slate-200';
+    const statusBadge = isPaid
+      ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> ชำระแล้ว</span>`
+      : `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> รอชำระ</span>`;
+
+    return `
+      <div class="bg-white rounded-2xl border ${borderClass} shadow-sm hover:shadow-md transition p-5 space-y-4 flex flex-col justify-between">
+        <div>
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <span class="text-xs font-semibold text-slate-400">${bill.id}</span>
+              <h3 class="text-xl font-bold text-slate-800">ห้อง ${bill.roomNumber}</h3>
+              <p class="text-xs text-blue-600 font-medium">${bill.month}</p>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <!-- Total Banner -->
+          <div class="my-3 p-3 rounded-xl bg-slate-50 flex items-center justify-between">
+            <span class="text-xs text-slate-500">ยอดชำระสุทธิ:</span>
+            <span class="text-xl font-extrabold ${isPaid ? 'text-emerald-600' : 'text-blue-600'}">
+              ${Number(bill.totalAmount).toLocaleString()} บาท
+            </span>
+          </div>
+
+          <!-- Itemized Breakdown -->
+          <div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-3">
+            <div class="flex justify-between">
+              <span>ค่าเช่าห้อง:</span>
+              <span class="font-semibold text-slate-800">${Number(bill.rent).toLocaleString()} ฿</span>
+            </div>
+            <div class="flex justify-between">
+              <span>ค่าไฟ (${bill.electricUnits} หน่วย @ ${bill.electricRate}฿):</span>
+              <span class="font-semibold text-slate-800">${Number(bill.electricAmount).toLocaleString()} ฿</span>
+            </div>
+            <div class="flex justify-between">
+              <span>ค่าน้ำ (${bill.waterUnits} หน่วย @ ${bill.waterRate}฿):</span>
+              <span class="font-semibold text-slate-800">${Number(bill.waterAmount).toLocaleString()} ฿</span>
+            </div>
+            <div class="flex justify-between">
+              <span>ค่าส่วนกลาง:</span>
+              <span class="font-semibold text-slate-800">${Number(bill.commonFee || 0).toLocaleString()} ฿</span>
+            </div>
+            ${bill.parkingFee > 0 ? `
+              <div class="flex justify-between text-indigo-700">
+                <span>ค่าที่จอดรถ ${bill.licensePlate ? `(${bill.licensePlate})` : ''}:</span>
+                <span class="font-semibold">${Number(bill.parkingFee).toLocaleString()} ฿</span>
+              </div>
+            ` : ''}
+            ${bill.otherFee > 0 ? `
+              <div class="flex justify-between text-amber-700">
+                <span>อื่นๆ (${bill.otherFeeRemark || 'เพิ่มเติม'}):</span>
+                <span class="font-semibold">${Number(bill.otherFee).toLocaleString()} ฿</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Card Footer & Actions -->
+        <div class="border-t border-slate-100 pt-3 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="${bill.lineSent ? 'text-emerald-600 font-semibold' : 'text-slate-400'} flex items-center gap-1">
+              <i data-lucide="${bill.lineSent ? 'check-check' : 'message-square'}" class="w-3.5 h-3.5"></i>
+              ${bill.lineSent ? 'ส่ง LINE แล้ว' : 'ยังไม่ส่ง LINE'}
+            </span>
+            <button onclick="toggleBillStatus('${bill.id}', '${isPaid ? 'pending' : 'paid'}')" class="text-[11px] text-blue-600 underline font-medium">
+              ${isPaid ? 'เปลี่ยนเป็นรอชำระ' : 'กดเมื่อชำระแล้ว'}
+            </button>
+          </div>
+
+          <div class="grid grid-cols-4 gap-1.5 pt-1">
+            <button onclick="sendLineBill('${bill.id}')" class="py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1" title="ส่งบิลเข้า LINE">
+              <i data-lucide="send" class="w-3.5 h-3.5"></i> LINE
+            </button>
+            <button onclick="openPrintBill('${bill.id}')" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1" title="พิมพ์">
+              <i data-lucide="printer" class="w-3.5 h-3.5"></i> พิมพ์
+            </button>
+            <button onclick="openOnlineBill('${bill.id}')" class="py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1" title="ดู QR">
+              <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> QR
+            </button>
+            <button onclick="deleteBill('${bill.id}')" class="py-2 hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold transition flex items-center justify-center" title="ลบ">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -624,42 +1127,48 @@ function onBillRoomSelect() {
   if (!room) return;
 
   document.getElementById('formBillRent').value = room.price || 4000;
-  document.getElementById('formBillCommonFee').value = state.settings.commonFeeDefault || 300;
+  document.getElementById('formBillCommonFee').value = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
+  document.getElementById('formBillParkingFee').value = room.parkingFee || 0;
+  document.getElementById('formBillLicensePlate').value = room.licensePlate || '';
   document.getElementById('formBillPrevElec').value = room.lastElectricMeter || 0;
   document.getElementById('formBillCurrElec').value = (room.lastElectricMeter || 0) + 50;
   document.getElementById('formBillPrevWater').value = room.lastWaterMeter || 0;
   document.getElementById('formBillCurrWater').value = (room.lastWaterMeter || 0) + 8;
-  document.getElementById('formBillOtherFee').value = 0;
-  document.getElementById('formBillOtherRemark').value = '';
+  document.getElementById('formBillOtherFee').value = room.otherFee || 0;
+  document.getElementById('formBillOtherRemark').value = room.otherFeeRemark || '';
 
   document.getElementById('rateLabelElec').innerText = state.settings.electricRate || 8;
   document.getElementById('rateLabelWater').innerText = state.settings.waterRate || 18;
 
+  toggleBillOtherRemark();
   calculateBillTotal();
 }
 
 function calculateBillTotal() {
-  const rent = Number(document.getElementById('formBillRent').value || 0);
-  const commonFee = Number(document.getElementById('formBillCommonFee').value || 0);
+  const rent = Number(document.getElementById('formBillRent')?.value || 0);
+  const commonFee = Number(document.getElementById('formBillCommonFee')?.value || 0);
+  const parkingFee = Number(document.getElementById('formBillParkingFee')?.value || 0);
+  const otherFee = Number(document.getElementById('formBillOtherFee')?.value || 0);
 
-  const prevElec = Number(document.getElementById('formBillPrevElec').value || 0);
-  const currElec = Number(document.getElementById('formBillCurrElec').value || 0);
+  const prevElec = Number(document.getElementById('formBillPrevElec')?.value || 0);
+  const currElec = Number(document.getElementById('formBillCurrElec')?.value || 0);
   const elecRate = Number(state.settings.electricRate || 8);
   const elecUnits = Math.max(0, currElec - prevElec);
-  const elecAmount = Math.round(elecUnits * elecRate);
-  document.getElementById('calcElecAmount').innerText = `${elecAmount.toLocaleString()} ฿ (${elecUnits} หน่วย)`;
+  const electricAmount = Math.round(elecUnits * elecRate);
+  const calcElecEl = document.getElementById('calcElecAmount');
+  if (calcElecEl) calcElecEl.innerText = `${electricAmount.toLocaleString()} ฿ (${elecUnits} หน่วย)`;
 
-  const prevWater = Number(document.getElementById('formBillPrevWater').value || 0);
-  const currWater = Number(document.getElementById('formBillCurrWater').value || 0);
+  const prevWater = Number(document.getElementById('formBillPrevWater')?.value || 0);
+  const currWater = Number(document.getElementById('formBillCurrWater')?.value || 0);
   const waterRate = Number(state.settings.waterRate || 18);
   const waterUnits = Math.max(0, currWater - prevWater);
   const waterAmount = Math.round(waterUnits * waterRate);
-  document.getElementById('calcWaterAmount').innerText = `${waterAmount.toLocaleString()} ฿ (${waterUnits} หน่วย)`;
+  const calcWaterEl = document.getElementById('calcWaterAmount');
+  if (calcWaterEl) calcWaterEl.innerText = `${waterAmount.toLocaleString()} ฿ (${waterUnits} หน่วย)`;
 
-  const otherFee = Number(document.getElementById('formBillOtherFee').value || 0);
-
-  const grandTotal = rent + commonFee + elecAmount + waterAmount + otherFee;
-  document.getElementById('calcGrandTotal').innerText = `${grandTotal.toLocaleString()} บาท`;
+  const grandTotal = rent + commonFee + parkingFee + otherFee + electricAmount + waterAmount;
+  const calcGrandTotalEl = document.getElementById('calcGrandTotal');
+  if (calcGrandTotalEl) calcGrandTotalEl.innerText = `${grandTotal.toLocaleString()} บาท`;
 }
 
 async function saveBillForm(e) {
@@ -667,13 +1176,15 @@ async function saveBillForm(e) {
   const roomNumber = document.getElementById('formBillRoomNumber').value;
   const month = document.getElementById('formBillMonth').value;
   const rent = Number(document.getElementById('formBillRent').value);
-  const commonFee = Number(document.getElementById('formBillCommonFee').value);
-  const prevElec = Number(document.getElementById('formBillPrevElec').value);
-  const currElec = Number(document.getElementById('formBillCurrElec').value);
-  const prevWater = Number(document.getElementById('formBillPrevWater').value);
-  const currWater = Number(document.getElementById('formBillCurrWater').value);
-  const otherFee = Number(document.getElementById('formBillOtherFee').value);
-  const otherFeeRemark = document.getElementById('formBillOtherRemark').value;
+  const commonFee = Number(document.getElementById('formBillCommonFee').value || 0);
+  const parkingFee = Number(document.getElementById('formBillParkingFee').value || 0);
+  const licensePlate = document.getElementById('formBillLicensePlate').value.trim();
+  const prevElec = Number(document.getElementById('formBillPrevElec').value || 0);
+  const currElec = Number(document.getElementById('formBillCurrElec').value || 0);
+  const prevWater = Number(document.getElementById('formBillPrevWater').value || 0);
+  const currWater = Number(document.getElementById('formBillCurrWater').value || 0);
+  const otherFee = Number(document.getElementById('formBillOtherFee').value || 0);
+  const otherFeeRemark = document.getElementById('formBillOtherRemark').value.trim();
   const dueDate = document.getElementById('formBillDueDate').value;
 
   const payload = {
@@ -681,6 +1192,8 @@ async function saveBillForm(e) {
     month,
     rent,
     commonFee,
+    parkingFee,
+    licensePlate,
     prevElectricMeter: prevElec,
     currElectricMeter: currElec,
     prevWaterMeter: prevWater,
@@ -768,4 +1281,3 @@ async function saveSettings(e) {
     alert(err.message);
   }
 }
-

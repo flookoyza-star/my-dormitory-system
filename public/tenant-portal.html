@@ -63,6 +63,13 @@
           <span>ค่าส่วนกลาง</span>
           <span id="commonAmount" class="font-semibold text-slate-800">0 ฿</span>
         </div>
+        <div id="parkingRow" class="hidden flex justify-between text-slate-600">
+          <div>
+            <span>ค่าที่จอดรถ</span>
+            <span id="licensePlateDetail" class="text-xs text-slate-400 block"></span>
+          </div>
+          <span id="parkingAmount" class="font-semibold text-slate-800">0 ฿</span>
+        </div>
         <div id="otherRow" class="hidden flex justify-between text-slate-600">
           <span id="otherRemark">อื่นๆ</span>
           <span id="otherAmount" class="font-semibold text-slate-800">0 ฿</span>
@@ -129,6 +136,14 @@
         document.getElementById('waterDetail').innerText = `(${bill.waterUnits} หน่วย: ${bill.prevWaterMeter} ➔ ${bill.currWaterMeter})`;
 
         document.getElementById('commonAmount').innerText = `${Number(bill.commonFee || 0).toLocaleString()} ฿`;
+
+        if (bill.parkingFee > 0) {
+          document.getElementById('parkingRow').classList.remove('hidden');
+          document.getElementById('parkingAmount').innerText = `${Number(bill.parkingFee).toLocaleString()} ฿`;
+          if (bill.licensePlate) {
+            document.getElementById('licensePlateDetail').innerText = `ทะเบียน: ${bill.licensePlate}`;
+          }
+        }
 
         if (bill.otherFee > 0) {
           document.getElementById('otherRow').classList.remove('hidden');

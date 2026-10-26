@@ -171,34 +171,51 @@
       <section id="tab-rooms" class="space-y-6 hidden">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-2">
-            <input type="text" id="roomSearchInput" oninput="renderRoomsTable()" placeholder="ค้นหาเลขห้อง หรือชื่อผู้เช่า..." class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 w-64 bg-white">
-            <select id="roomStatusFilter" onchange="renderRoomsTable()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-blue-500">
+            <input type="text" id="roomSearchInput" oninput="renderRooms()" placeholder="ค้นหาเลขห้อง หรือชื่อผู้เช่า..." class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 w-60 bg-white">
+            <select id="roomStatusFilter" onchange="renderRooms()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-blue-500">
               <option value="all">สถานะทั้งหมด</option>
               <option value="occupied">มีผู้เช่า (Occupied)</option>
               <option value="vacant">ห้องว่าง (Vacant)</option>
               <option value="maintenance">ซ่อมบำรุง (Maintenance)</option>
             </select>
           </div>
-          <button onclick="openAddRoomModal()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition shadow-sm">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-            เพิ่มห้องพักใหม่
-          </button>
+
+          <div class="flex items-center gap-2">
+            <!-- View Mode Toggle -->
+            <div class="flex items-center bg-slate-200/80 p-1 rounded-xl text-xs">
+              <button type="button" onclick="setRoomViewMode('card')" id="btnRoomViewCard" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                แบบการ์ด
+              </button>
+              <button type="button" onclick="setRoomViewMode('table')" id="btnRoomViewTable" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900">
+                <i data-lucide="table" class="w-4 h-4"></i>
+                แบบตาราง/คอลัมน์
+              </button>
+            </div>
+
+            <button onclick="openAddRoomModal()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition shadow-sm">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              เพิ่มห้องพักใหม่
+            </button>
+          </div>
         </div>
 
-        <!-- Rooms Table -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <!-- Rooms Table View -->
+        <div id="roomsTableContainer" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
                 <tr>
-                  <th class="px-6 py-4">ห้อง</th>
-                  <th class="px-6 py-4">ประเภท / ชั้น</th>
-                  <th class="px-6 py-4">ค่าเช่ารายเดือน</th>
-                  <th class="px-6 py-4">สถานะ</th>
-                  <th class="px-6 py-4">ผู้เช่า</th>
-                  <th class="px-6 py-4">เบอร์โทร</th>
-                  <th class="px-6 py-4">LINE User ID</th>
-                  <th class="px-6 py-4 text-center">จัดการ</th>
+                  <th class="px-5 py-4">ห้อง</th>
+                  <th class="px-5 py-4">ประเภท/ชั้น</th>
+                  <th class="px-5 py-4">ค่าเช่าห้อง</th>
+                  <th class="px-5 py-4">ค่าส่วนกลาง</th>
+                  <th class="px-5 py-4">ที่จอดรถ/ทะเบียน</th>
+                  <th class="px-5 py-4">ค่าอื่นๆ</th>
+                  <th class="px-5 py-4">สถานะ</th>
+                  <th class="px-5 py-4">ผู้เช่า/เบอร์</th>
+                  <th class="px-5 py-4">LINE ID</th>
+                  <th class="px-5 py-4 text-center">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="roomsTableBody" class="divide-y divide-slate-100">
@@ -206,6 +223,11 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- Rooms Card View -->
+        <div id="roomsCardContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Rendered by JS -->
         </div>
       </section>
 
@@ -216,39 +238,63 @@
             <i data-lucide="info" class="w-5 h-5"></i>
           </div>
           <div class="text-sm text-blue-900">
-            <h4 class="font-bold">ระบบจดมิเตอร์น้ำ - ไฟอัตโนมัติ</h4>
-            <p class="text-blue-700 mt-1">กรอกเลขมิเตอร์น้ำและไฟฟ้าของรอบปัจจุบัน ระบบจะดึงเลขครั้งก่อนมาคำนวณหน่วยที่ใช้ และออกใบแจ้งหนี้ให้ทันที</p>
+            <h4 class="font-bold">ระบบจดมิเตอร์น้ำ - ไฟ และคำนวณบิลครบวงจร</h4>
+            <p class="text-blue-700 mt-1">ดึงเลขมิเตอร์รอบก่อนหน้ามาแสดงอัตโนมัติ กรอกเลขมิเตอร์รอบใหม่ ระบบจะคำนวณหน่วยและรวมค่าส่วนกลาง ค่าที่จอดรถ ค่าอื่นๆ จากข้อมูลห้องพักให้อัตโนมัติในคลิกเดียว</p>
           </div>
         </div>
 
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <h3 class="font-bold text-slate-800 text-base">บันทึกมิเตอร์รอบปัจจุบัน</h3>
-            <div class="flex items-center gap-2">
-              <label class="text-xs text-slate-500 font-medium">รอบบิลประจำเดือน:</label>
-              <input type="text" id="meterBillingMonth" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-slate-50 font-semibold" value="">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <h3 class="font-bold text-slate-800 text-base">บันทึกมิเตอร์รอบปัจจุบัน</h3>
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-slate-500 font-medium">รอบบิลประจำเดือน:</label>
+                <input type="text" id="meterBillingMonth" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs bg-slate-50 font-semibold" value="">
+              </div>
+            </div>
+
+            <!-- Meter View Mode Toggle -->
+            <div class="flex items-center bg-slate-200/80 p-1 rounded-xl text-xs">
+              <button type="button" onclick="setMeterViewMode('table')" id="btnMeterViewTable" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm">
+                <i data-lucide="table" class="w-4 h-4"></i>
+                แบบตาราง/คอลัมน์
+              </button>
+              <button type="button" onclick="setMeterViewMode('card')" id="btnMeterViewCard" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                แบบการ์ด
+              </button>
             </div>
           </div>
 
-          <div class="overflow-x-auto">
+          <!-- Meter Table View -->
+          <div id="meterTableContainer" class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 text-slate-700 text-xs font-semibold uppercase border-b border-slate-200">
                 <tr>
-                  <th class="px-4 py-3">ห้อง</th>
-                  <th class="px-4 py-3">ผู้เช่า</th>
-                  <th class="px-4 py-3">มิเตอร์ไฟเดิม</th>
-                  <th class="px-4 py-3">มิเตอร์ไฟใหม่</th>
-                  <th class="px-4 py-3">หน่วยไฟที่ใช้</th>
-                  <th class="px-4 py-3">มิเตอร์น้ำเดิม</th>
-                  <th class="px-4 py-3">มิเตอร์น้ำใหม่</th>
-                  <th class="px-4 py-3">หน่วยน้ำที่ใช้</th>
-                  <th class="px-4 py-3 text-center">การกระทำ</th>
+                  <th class="px-3 py-3">ห้อง / ผู้เช่า</th>
+                  <th class="px-3 py-3">มิเตอร์ไฟเดิม</th>
+                  <th class="px-3 py-3">มิเตอร์ไฟใหม่</th>
+                  <th class="px-3 py-3">หน่วยไฟ</th>
+                  <th class="px-3 py-3">มิเตอร์น้ำเดิม</th>
+                  <th class="px-3 py-3">มิเตอร์น้ำใหม่</th>
+                  <th class="px-3 py-3">หน่วยน้ำ</th>
+                  <th class="px-3 py-3">ค่าห้อง</th>
+                  <th class="px-3 py-3">ส่วนกลาง</th>
+                  <th class="px-3 py-3">ที่จอดรถ</th>
+                  <th class="px-3 py-3">อื่นๆ</th>
+                  <th class="px-3 py-3">ยอดรวมประมาณการ</th>
+                  <th class="px-3 py-3 text-center">สร้างบิล</th>
                 </tr>
               </thead>
               <tbody id="meterEntryTableBody" class="divide-y divide-slate-100">
                 <!-- Rendered by JS -->
               </tbody>
             </table>
+          </div>
+
+          <!-- Meter Card View -->
+          <div id="meterCardContainer" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Rendered by JS -->
           </div>
         </div>
       </section>
@@ -257,8 +303,8 @@
       <section id="tab-bills" class="space-y-6 hidden">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div class="flex items-center gap-2">
-            <input type="text" id="billSearchInput" oninput="renderBillsTable()" placeholder="ค้นหาเลขห้อง หรือรอบบิล..." class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 w-64 bg-white">
-            <select id="billStatusFilter" onchange="renderBillsTable()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-blue-500">
+            <input type="text" id="billSearchInput" oninput="renderBills()" placeholder="ค้นหาเลขห้อง หรือรอบบิล..." class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 w-60 bg-white">
+            <select id="billStatusFilter" onchange="renderBills()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-blue-500">
               <option value="all">สถานะทั้งหมด</option>
               <option value="pending">รอชำระเงิน (Pending)</option>
               <option value="paid">ชำระแล้ว (Paid)</option>
@@ -266,6 +312,18 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <!-- Bills View Mode Toggle -->
+            <div class="flex items-center bg-slate-200/80 p-1 rounded-xl text-xs">
+              <button type="button" onclick="setBillViewMode('table')" id="btnBillViewTable" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition bg-white text-blue-600 shadow-sm">
+                <i data-lucide="table" class="w-4 h-4"></i>
+                แบบตาราง/คอลัมน์
+              </button>
+              <button type="button" onclick="setBillViewMode('card')" id="btnBillViewCard" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition text-slate-600 hover:text-slate-900">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                แบบการ์ด
+              </button>
+            </div>
+
             <button onclick="openCreateBillModal()" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition shadow-sm">
               <i data-lucide="file-plus" class="w-4 h-4"></i>
               ออกบิลใหม่
@@ -277,21 +335,24 @@
           </div>
         </div>
 
-        <!-- Bills Table -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <!-- Bills Table View -->
+        <div id="billsTableContainer" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
                 <tr>
-                  <th class="px-5 py-4">เลขที่บิล / รอบบิล</th>
-                  <th class="px-5 py-4">ห้อง</th>
-                  <th class="px-5 py-4">ค่าห้อง</th>
-                  <th class="px-5 py-4">ค่าไฟ (หน่วย)</th>
-                  <th class="px-5 py-4">ค่าน้ำ (หน่วย)</th>
-                  <th class="px-5 py-4">ยอดรวมสุทธิ</th>
-                  <th class="px-5 py-4">สถานะบิล</th>
-                  <th class="px-5 py-4">ส่ง LINE</th>
-                  <th class="px-5 py-4 text-center">จัดการ</th>
+                  <th class="px-4 py-4">เลขที่บิล / รอบบิล</th>
+                  <th class="px-4 py-4">ห้อง</th>
+                  <th class="px-4 py-4">ค่าห้อง</th>
+                  <th class="px-4 py-4">ค่าไฟ (หน่วย)</th>
+                  <th class="px-4 py-4">ค่าน้ำ (หน่วย)</th>
+                  <th class="px-4 py-4">ส่วนกลาง</th>
+                  <th class="px-4 py-4">ที่จอดรถ (ทะเบียน)</th>
+                  <th class="px-4 py-4">ค่าอื่นๆ</th>
+                  <th class="px-4 py-4">ยอดรวมสุทธิ</th>
+                  <th class="px-4 py-4">สถานะบิล</th>
+                  <th class="px-4 py-4">LINE</th>
+                  <th class="px-4 py-4 text-center">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="billsTableBody" class="divide-y divide-slate-100">
@@ -299,6 +360,11 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- Bills Card View -->
+        <div id="billsCardContainer" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Rendered by JS -->
         </div>
       </section>
 
@@ -416,6 +482,41 @@
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">ค่าเช่ารายเดือน (บาท) *</label>
             <input type="number" id="formRoomPrice" required placeholder="4500" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
+          </div>
+        </div>
+
+        <!-- Additional Room Charges (Common fee, Parking, License Plate, Others) -->
+        <div class="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-3">
+          <p class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <i data-lucide="calculator" class="w-4 h-4 text-indigo-600"></i>
+            ค่าใช้จ่ายประจำห้องพัก (สำหรับคิดบิลอัตโนมัติ)
+          </p>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าส่วนกลาง (บาท)</label>
+              <input type="number" id="formRoomCommonFee" value="300" class="w-full border border-slate-200 rounded-lg p-2 text-xs focus:outline-blue-500 bg-white">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าที่จอดรถ (บาท)</label>
+              <input type="number" id="formRoomParkingFee" value="0" class="w-full border border-slate-200 rounded-lg p-2 text-xs focus:outline-blue-500 bg-white">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ทะเบียนรถ (ถ้ามี)</label>
+              <input type="text" id="formRoomLicensePlate" placeholder="1กข-9999 กทม." class="w-full border border-slate-200 rounded-lg p-2 text-xs focus:outline-blue-500 bg-white">
+            </div>
+          </div>
+
+          <!-- Other fee with dynamic remark toggle -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าอื่นๆ (บาท)</label>
+              <input type="number" id="formRoomOtherFee" value="0" oninput="toggleRoomOtherRemark()" placeholder="0" class="w-full border border-slate-200 rounded-lg p-2 text-xs focus:outline-blue-500 bg-white">
+            </div>
+            <div id="roomOtherRemarkGroup" class="hidden">
+              <label class="block text-[11px] font-semibold text-amber-700 mb-1">ระบุหมายเหตุค่าอื่นๆ *</label>
+              <input type="text" id="formRoomOtherRemark" placeholder="เช่น ค่าเช่าตู้เย็น, ค่าคีย์การ์ด" class="w-full border border-amber-300 rounded-lg p-2 text-xs focus:outline-amber-500 bg-amber-50/50">
+            </div>
           </div>
         </div>
 
@@ -549,14 +650,27 @@
           </div>
         </div>
 
+        <!-- Parking & License Plate -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">ค่าที่จอดรถ (บาท)</label>
+            <input type="number" id="formBillParkingFee" oninput="calculateBillTotal()" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">ทะเบียนรถ</label>
+            <input type="text" id="formBillLicensePlate" placeholder="1กข-9999 กทม." class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
+          </div>
+        </div>
+
+        <!-- Other fee & dynamic remark -->
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">ค่าใช้จ่ายอื่นๆ (ถ้ามี)</label>
-            <input type="number" id="formBillOtherFee" value="0" oninput="calculateBillTotal()" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
+            <input type="number" id="formBillOtherFee" value="0" oninput="toggleBillOtherRemark(); calculateBillTotal()" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">หมายเหตุค่าใช้จ่ายอื่นๆ</label>
-            <input type="text" id="formBillOtherRemark" placeholder="เช่น ค่าที่จอดรถ" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-blue-500">
+          <div id="billOtherRemarkGroup" class="hidden">
+            <label class="block text-xs font-semibold text-amber-700 mb-1">หมายเหตุค่าใช้จ่ายอื่นๆ *</label>
+            <input type="text" id="formBillOtherRemark" placeholder="ระบุเหตุผล เช่น ค่าเช่าตู้เย็น" class="w-full border border-amber-300 rounded-lg p-2 text-sm focus:outline-amber-500 bg-amber-50/50">
           </div>
         </div>
 

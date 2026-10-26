@@ -166,11 +166,14 @@ app.post('/api/bills', async (req, res) => {
     const waterAmount = Math.round(waterUnits * waterRate);
 
     const rent = Number(data.rent || room.price || 0);
-    const commonFee = Number(data.commonFee !== undefined ? data.commonFee : settings.commonFeeDefault || 0);
-    const otherFee = Number(data.otherFee || 0);
+    const commonFee = Number(data.commonFee !== undefined ? data.commonFee : (room.commonFee !== undefined ? room.commonFee : (settings.commonFeeDefault || 0)));
+    const parkingFee = Number(data.parkingFee !== undefined ? data.parkingFee : (room.parkingFee || 0));
+    const licensePlate = data.licensePlate || room.licensePlate || '';
+    const otherFee = Number(data.otherFee !== undefined ? data.otherFee : (room.otherFee || 0));
+    const otherFeeRemark = data.otherFeeRemark || room.otherFeeRemark || '';
     const discount = Number(data.discount || 0);
 
-    const totalAmount = Math.max(0, rent + electricAmount + waterAmount + commonFee + otherFee - discount);
+    const totalAmount = Math.max(0, rent + electricAmount + waterAmount + commonFee + parkingFee + otherFee - discount);
 
     const monthStr = data.month || new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
     const billId = data.id || `BILL-${Date.now().toString().slice(-6)}-${data.roomNumber}`;
@@ -193,8 +196,10 @@ app.post('/api/bills', async (req, res) => {
       waterRate,
       waterAmount,
       commonFee,
+      parkingFee,
+      licensePlate,
       otherFee,
-      otherFeeRemark: data.otherFeeRemark || '',
+      otherFeeRemark,
       discount,
       totalAmount,
       status: data.status || 'pending',
