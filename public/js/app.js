@@ -6,7 +6,7 @@ let state = {
   currentTab: 'dashboard',
   editingRoomId: null,
   roomViewMode: 'card',    // 'card' or 'table'
-  meterViewMode: 'table',  // 'table' or 'card'
+  meterViewMode: 'card',   // 'card' or 'table'
   billViewMode: 'table'    // 'table' or 'card'
 };
 
@@ -565,7 +565,7 @@ function renderMeter() {
 
   const occupiedRooms = state.rooms.filter(r => r.status === 'occupied');
   if (occupiedRooms.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-8 text-slate-400">ยังไม่มีห้องที่มีผู้เช่า</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" class="text-center py-8 text-slate-400">ยังไม่มีห้องที่มีผู้เช่า</td></tr>`;
     cardContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">ยังไม่มีห้องที่มีผู้เช่า</div>`;
     return;
   }
@@ -573,56 +573,176 @@ function renderMeter() {
   const elecRate = Number(state.settings.electricRate || 8);
   const waterRate = Number(state.settings.waterRate || 18);
 
+  // Render Card View (ตามแบบรูปที่ 1 & 2)
+  cardContainer.innerHTML = occupiedRooms.map(room => {
+    const prevElec = room.lastElectricMeter || 0;
+    const prevWater = room.lastWaterMeter || 0;
+    const rentVal = room.price !== undefined && room.price !== null ? room.price : '';
+    const commonVal = (room.commonFee !== undefined && room.commonFee !== null && room.commonFee !== '') ? room.commonFee : (state.settings.commonFeeDefault || 300);
+    const parkingVal = (room.parkingFee && room.parkingFee > 0) ? room.parkingFee : '';
+    const plateVal = room.licensePlate || '';
+    const otherVal = (room.otherFee && room.otherFee > 0) ? room.otherFee : '';
+    const remarkVal = room.otherFeeRemark || '';
+
+    const initialTotal = Number(rentVal || 0) + Number(commonVal || 0) + Number(parkingVal || 0) + Number(otherVal || 0);
+
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:shadow-md transition">
+        <!-- Room Info & Live Total Badge -->
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div>
+            <h4 class="font-bold text-slate-800 text-lg">ห้อง ${room.number}</h4>
+            <p class="text-xs text-slate-500 font-medium">${room.tenant?.name || '—'}</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg text-sm" id="card-m-total-${room.number}">
+            ${initialTotal.toLocaleString()} ฿
+          </span>
+        </div>
+
+        <!-- Meter inputs (Elec & Water) -->
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Elec box -->
+          <div class="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-bold text-amber-800">
+              <span class="flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5 text-amber-600"></i> ไฟฟ้า</span>
+              <span class="text-[10px] text-slate-400">เดิม: ${prevElec}</span>
+            </div>
+            <input type="number" id="card-m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="updateMeterCardCalc('${room.number}')" class="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-amber-500 font-semibold">
+            <p class="text-[11px] text-amber-700 font-semibold" id="card-m-diff-elec-${room.number}">0 หน่วย</p>
+          </div>
+
+          <!-- Water box -->
+          <div class="p-3 bg-cyan-50/60 border border-cyan-200/60 rounded-xl space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-bold text-cyan-800">
+              <span class="flex items-center gap-1"><i data-lucide="droplet" class="w-3.5 h-3.5 text-cyan-600"></i> น้ำประปา</span>
+              <span class="text-[10px] text-slate-400">เดิม: ${prevWater}</span>
+            </div>
+            <input type="number" id="card-m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="updateMeterCardCalc('${room.number}')" class="w-full bg-white border border-cyan-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-cyan-500 font-semibold">
+            <p class="text-[11px] text-cyan-700 font-semibold" id="card-m-diff-water-${room.number}">0 หน่วย</p>
+          </div>
+        </div>
+
+        <!-- ค่าใช้จ่ายประจำห้องพัก (เหมือนแบบในรูปที่ 1) -->
+        <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50 space-y-2.5 text-xs">
+          <p class="font-bold text-slate-700 flex items-center gap-1.5 text-xs">
+            <i data-lucide="calculator" class="w-4 h-4 text-indigo-600"></i>
+            ค่าใช้จ่ายประจำห้องพัก (สำหรับคิดบิลอัตโนมัติ)
+          </p>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าเช่าห้อง (บาท) *</label>
+              <input type="number" id="card-m-rent-${room.number}" value="${rentVal}" placeholder="0" oninput="updateMeterCardCalc('${room.number}')" class="w-full border border-slate-200 rounded-lg p-1.5 text-xs bg-white focus:outline-blue-500 font-medium">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าส่วนกลาง (บาท)</label>
+              <input type="number" id="card-m-common-${room.number}" value="${commonVal}" placeholder="0" oninput="updateMeterCardCalc('${room.number}')" class="w-full border border-slate-200 rounded-lg p-1.5 text-xs bg-white focus:outline-blue-500 font-medium">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าที่จอดรถ (บาท)</label>
+              <input type="number" id="card-m-parking-${room.number}" value="${parkingVal}" placeholder="0" oninput="updateMeterCardCalc('${room.number}')" class="w-full border border-slate-200 rounded-lg p-1.5 text-xs bg-white focus:outline-blue-500 font-medium">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ทะเบียนรถ (ถ้ามี)</label>
+              <input type="text" id="card-m-plate-${room.number}" value="${plateVal}" placeholder="1กข-9999 กทม." class="w-full border border-slate-200 rounded-lg p-1.5 text-xs bg-white focus:outline-blue-500">
+            </div>
+          </div>
+
+          <!-- Other fee & dynamic remark -->
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">ค่าอื่นๆ (บาท)</label>
+              <input type="number" id="card-m-other-${room.number}" value="${otherVal}" placeholder="0" oninput="toggleCardMeterOtherRemark('${room.number}'); updateMeterCardCalc('${room.number}')" class="w-full border border-slate-200 rounded-lg p-1.5 text-xs bg-white focus:outline-blue-500 font-medium">
+            </div>
+            <div id="card-m-remark-group-${room.number}" class="${otherVal ? '' : 'hidden'}">
+              <label class="block text-[11px] font-semibold text-amber-700 mb-1">ระบุหมายเหตุค่าอื่นๆ *</label>
+              <input type="text" id="card-m-remark-${room.number}" value="${remarkVal}" placeholder="เช่น ค่าเช่าตู้เย็น, ค่าคีย์การ์ด" class="w-full border border-amber-300 rounded-lg p-1.5 text-xs bg-amber-50/50 focus:outline-amber-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button onclick="createBillFromCard('${room.number}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center justify-center gap-2">
+          <i data-lucide="receipt" class="w-4 h-4"></i> ออกบิลห้อง ${room.number}
+        </button>
+      </div>
+    `;
+  }).join('');
+
   // Render Table View
   tbody.innerHTML = occupiedRooms.map(room => {
     const prevElec = room.lastElectricMeter || 0;
     const prevWater = room.lastWaterMeter || 0;
-    const commonFee = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
-    const parkingFee = room.parkingFee || 0;
-    const otherFee = room.otherFee || 0;
+    const rentVal = room.price !== undefined && room.price !== null ? room.price : '';
+    const commonVal = (room.commonFee !== undefined && room.commonFee !== null && room.commonFee !== '') ? room.commonFee : (state.settings.commonFeeDefault || 300);
+    const parkingVal = (room.parkingFee && room.parkingFee > 0) ? room.parkingFee : '';
+    const plateVal = room.licensePlate || '';
+    const otherVal = (room.otherFee && room.otherFee > 0) ? room.otherFee : '';
+    const remarkVal = room.otherFeeRemark || '';
+
+    const initialTotal = Number(rentVal || 0) + Number(commonVal || 0) + Number(parkingVal || 0) + Number(otherVal || 0);
 
     return `
-      <tr id="meter-row-${room.number}" class="hover:bg-slate-50 transition">
+      <tr id="meter-row-${room.number}" class="hover:bg-slate-50 transition text-xs">
         <td class="px-3 py-3">
           <p class="font-bold text-slate-800 text-sm">ห้อง ${room.number}</p>
           <p class="text-[11px] text-slate-500">${room.tenant?.name || '—'}</p>
         </td>
 
         <!-- Elec prev & curr -->
-        <td class="px-3 py-3 text-xs font-mono text-slate-600 bg-slate-50/50">
-          <input type="number" id="m-prev-elec-${room.number}" value="${prevElec}" readonly class="w-16 bg-transparent border-0 font-mono text-xs text-slate-500">
+        <td class="px-3 py-3 font-mono text-slate-500 bg-slate-50/50">
+          <input type="number" id="m-prev-elec-${room.number}" value="${prevElec}" readonly class="w-14 bg-transparent border-0 font-mono text-xs">
         </td>
         <td class="px-3 py-3">
-          <input type="number" id="m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500">
+          <input type="number" id="m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-amber-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-amber-500 font-semibold">
         </td>
-        <td class="px-3 py-3 font-bold text-amber-600 text-xs" id="m-diff-elec-${room.number}">0 น.</td>
+        <td class="px-3 py-3 font-bold text-amber-600" id="m-diff-elec-${room.number}">0 น.</td>
 
         <!-- Water prev & curr -->
-        <td class="px-3 py-3 text-xs font-mono text-slate-600 bg-slate-50/50">
-          <input type="number" id="m-prev-water-${room.number}" value="${prevWater}" readonly class="w-16 bg-transparent border-0 font-mono text-xs text-slate-500">
+        <td class="px-3 py-3 font-mono text-slate-500 bg-slate-50/50">
+          <input type="number" id="m-prev-water-${room.number}" value="${prevWater}" readonly class="w-14 bg-transparent border-0 font-mono text-xs">
         </td>
         <td class="px-3 py-3">
-          <input type="number" id="m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-cyan-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-500">
+          <input type="number" id="m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-cyan-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-cyan-500 font-semibold">
         </td>
-        <td class="px-3 py-3 font-bold text-cyan-600 text-xs" id="m-diff-water-${room.number}">0 น.</td>
+        <td class="px-3 py-3 font-bold text-cyan-600" id="m-diff-water-${room.number}">0 น.</td>
 
-        <!-- Other charges -->
-        <td class="px-3 py-3 text-xs">
-          <input type="number" id="m-rent-${room.number}" value="${room.price || 4500}" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        <!-- Room Rent -->
+        <td class="px-3 py-3">
+          <input type="number" id="m-rent-${room.number}" value="${rentVal}" placeholder="0" oninput="updateMeterRowCalc('${room.number}')" class="w-20 border border-slate-200 rounded px-1.5 py-1 text-xs">
         </td>
-        <td class="px-3 py-3 text-xs">
-          <input type="number" id="m-common-${room.number}" value="${commonFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+
+        <!-- Common Fee -->
+        <td class="px-3 py-3">
+          <input type="number" id="m-common-${room.number}" value="${commonVal}" placeholder="0" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
         </td>
-        <td class="px-3 py-3 text-xs">
-          <input type="number" id="m-parking-${room.number}" value="${parkingFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+
+        <!-- Parking Fee -->
+        <td class="px-3 py-3">
+          <input type="number" id="m-parking-${room.number}" value="${parkingVal}" placeholder="0" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
         </td>
-        <td class="px-3 py-3 text-xs">
-          <input type="number" id="m-other-${room.number}" value="${otherFee}" oninput="updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+
+        <!-- License Plate -->
+        <td class="px-3 py-3">
+          <input type="text" id="m-plate-${room.number}" value="${plateVal}" placeholder="ทะเบียนรถ" class="w-24 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+
+        <!-- Other Fee -->
+        <td class="px-3 py-3">
+          <input type="number" id="m-other-${room.number}" value="${otherVal}" placeholder="0" oninput="toggleTableMeterOtherRemark('${room.number}'); updateMeterRowCalc('${room.number}')" class="w-16 border border-slate-200 rounded px-1.5 py-1 text-xs">
+        </td>
+
+        <!-- Other Remark -->
+        <td class="px-3 py-3">
+          <input type="text" id="m-remark-${room.number}" value="${remarkVal}" placeholder="ระบุหมายเหตุ" class="w-28 border border-amber-300 rounded px-1.5 py-1 text-xs ${otherVal ? '' : 'hidden'} bg-amber-50/50">
         </td>
 
         <!-- Estimated Total -->
         <td class="px-3 py-3 font-bold text-blue-600 text-sm whitespace-nowrap" id="m-total-${room.number}">
-          ${(Number(room.price || 0) + commonFee + parkingFee + otherFee).toLocaleString()} ฿
+          ${initialTotal.toLocaleString()} ฿
         </td>
 
         <!-- Create Button -->
@@ -635,83 +755,64 @@ function renderMeter() {
     `;
   }).join('');
 
-  // Render Card View
-  cardContainer.innerHTML = occupiedRooms.map(room => {
-    const prevElec = room.lastElectricMeter || 0;
-    const prevWater = room.lastWaterMeter || 0;
-    const commonFee = room.commonFee !== undefined ? room.commonFee : (state.settings.commonFeeDefault || 300);
-    const parkingFee = room.parkingFee || 0;
-    const otherFee = room.otherFee || 0;
-
-    return `
-      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 hover:shadow-md transition">
-        <!-- Room Info -->
-        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-          <div>
-            <h4 class="font-bold text-slate-800 text-lg">ห้อง ${room.number}</h4>
-            <p class="text-xs text-slate-500 font-medium">${room.tenant?.name || '—'}</p>
-          </div>
-          <span class="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 font-bold rounded-lg" id="card-m-total-${room.number}">
-            ${(Number(room.price || 0) + commonFee + parkingFee + otherFee).toLocaleString()} ฿
-          </span>
-        </div>
-
-        <!-- Meter inputs -->
-        <div class="grid grid-cols-2 gap-3">
-          <!-- Elec box -->
-          <div class="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl space-y-1.5">
-            <div class="flex items-center justify-between text-xs font-bold text-amber-800">
-              <span class="flex items-center gap-1"><i data-lucide="zap" class="w-3.5 h-3.5 text-amber-600"></i> ไฟฟ้า</span>
-              <span class="text-[10px] text-slate-400">เดิม: ${prevElec}</span>
-            </div>
-            <input type="number" id="card-m-curr-elec-${room.number}" placeholder="เลขใหม่" oninput="syncMeterCardToRow('${room.number}', 'elec')" class="w-full bg-white border border-amber-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-amber-500">
-            <p class="text-[11px] text-amber-700 font-semibold" id="card-m-diff-elec-${room.number}">0 หน่วย</p>
-          </div>
-
-          <!-- Water box -->
-          <div class="p-3 bg-cyan-50/60 border border-cyan-200/60 rounded-xl space-y-1.5">
-            <div class="flex items-center justify-between text-xs font-bold text-cyan-800">
-              <span class="flex items-center gap-1"><i data-lucide="droplet" class="w-3.5 h-3.5 text-cyan-600"></i> น้ำประปา</span>
-              <span class="text-[10px] text-slate-400">เดิม: ${prevWater}</span>
-            </div>
-            <input type="number" id="card-m-curr-water-${room.number}" placeholder="เลขใหม่" oninput="syncMeterCardToRow('${room.number}', 'water')" class="w-full bg-white border border-cyan-300 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-cyan-500">
-            <p class="text-[11px] text-cyan-700 font-semibold" id="card-m-diff-water-${room.number}">0 หน่วย</p>
-          </div>
-        </div>
-
-        <!-- Charges Summary -->
-        <div class="text-xs bg-slate-50 p-3 rounded-xl space-y-1 text-slate-600">
-          <div class="flex justify-between">
-            <span>ค่าห้อง:</span>
-            <span class="font-semibold text-slate-800">${Number(room.price).toLocaleString()} ฿</span>
-          </div>
-          <div class="flex justify-between">
-            <span>ส่วนกลาง:</span>
-            <span>${Number(commonFee).toLocaleString()} ฿</span>
-          </div>
-          ${parkingFee > 0 ? `
-            <div class="flex justify-between text-indigo-700">
-              <span>ที่จอดรถ ${room.licensePlate ? `(${room.licensePlate})` : ''}:</span>
-              <span class="font-semibold">${Number(parkingFee).toLocaleString()} ฿</span>
-            </div>
-          ` : ''}
-          ${otherFee > 0 ? `
-            <div class="flex justify-between text-amber-700">
-              <span>อื่นๆ (${room.otherFeeRemark || ''}):</span>
-              <span class="font-semibold">${Number(otherFee).toLocaleString()} ฿</span>
-            </div>
-          ` : ''}
-        </div>
-
-        <!-- Submit Button -->
-        <button onclick="createBillFromMeterCard('${room.number}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center justify-center gap-2">
-          <i data-lucide="receipt" class="w-4 h-4"></i> ออกบิลห้อง ${room.number}
-        </button>
-      </div>
-    `;
-  }).join('');
-
   lucide.createIcons();
+}
+
+function toggleCardMeterOtherRemark(roomNumber) {
+  const fee = Number(document.getElementById(`card-m-other-${roomNumber}`)?.value || 0);
+  const group = document.getElementById(`card-m-remark-group-${roomNumber}`);
+  if (group) {
+    if (fee > 0) {
+      group.classList.remove('hidden');
+    } else {
+      group.classList.add('hidden');
+    }
+  }
+}
+
+function toggleTableMeterOtherRemark(roomNumber) {
+  const fee = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
+  const input = document.getElementById(`m-remark-${roomNumber}`);
+  if (input) {
+    if (fee > 0) {
+      input.classList.remove('hidden');
+    } else {
+      input.classList.add('hidden');
+    }
+  }
+}
+
+function updateMeterCardCalc(roomNumber) {
+  const room = state.rooms.find(r => r.number === String(roomNumber));
+  if (!room) return;
+
+  const elecRate = Number(state.settings.electricRate || 8);
+  const waterRate = Number(state.settings.waterRate || 18);
+
+  const prevElec = Number(room.lastElectricMeter || 0);
+  const currElecInput = document.getElementById(`card-m-curr-elec-${roomNumber}`)?.value;
+  const currElec = (currElecInput !== '' && currElecInput !== undefined) ? Number(currElecInput) : prevElec;
+  const diffElec = Math.max(0, currElec - prevElec);
+  const elecAmount = Math.round(diffElec * elecRate);
+  const diffElecEl = document.getElementById(`card-m-diff-elec-${roomNumber}`);
+  if (diffElecEl) diffElecEl.innerText = `${diffElec} หน่วย (${elecAmount.toLocaleString()} ฿)`;
+
+  const prevWater = Number(room.lastWaterMeter || 0);
+  const currWaterInput = document.getElementById(`card-m-curr-water-${roomNumber}`)?.value;
+  const currWater = (currWaterInput !== '' && currWaterInput !== undefined) ? Number(currWaterInput) : prevWater;
+  const diffWater = Math.max(0, currWater - prevWater);
+  const waterAmount = Math.round(diffWater * waterRate);
+  const diffWaterEl = document.getElementById(`card-m-diff-water-${roomNumber}`);
+  if (diffWaterEl) diffWaterEl.innerText = `${diffWater} หน่วย (${waterAmount.toLocaleString()} ฿)`;
+
+  const rent = Number(document.getElementById(`card-m-rent-${roomNumber}`)?.value || 0);
+  const common = Number(document.getElementById(`card-m-common-${roomNumber}`)?.value || 0);
+  const parking = Number(document.getElementById(`card-m-parking-${roomNumber}`)?.value || 0);
+  const other = Number(document.getElementById(`card-m-other-${roomNumber}`)?.value || 0);
+
+  const total = rent + common + parking + other + elecAmount + waterAmount;
+  const totalEl = document.getElementById(`card-m-total-${roomNumber}`);
+  if (totalEl) totalEl.innerText = `${total.toLocaleString()} ฿`;
 }
 
 function updateMeterRowCalc(roomNumber) {
@@ -722,20 +823,22 @@ function updateMeterRowCalc(roomNumber) {
   const waterRate = Number(state.settings.waterRate || 18);
 
   const prevElec = Number(document.getElementById(`m-prev-elec-${roomNumber}`)?.value || room.lastElectricMeter || 0);
-  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`)?.value || prevElec);
+  const currElecInput = document.getElementById(`m-curr-elec-${roomNumber}`)?.value;
+  const currElec = (currElecInput !== '' && currElecInput !== undefined) ? Number(currElecInput) : prevElec;
   const diffElec = Math.max(0, currElec - prevElec);
   const elecAmount = Math.round(diffElec * elecRate);
   const diffElecEl = document.getElementById(`m-diff-elec-${roomNumber}`);
-  if (diffElecEl) diffElecEl.innerText = `${diffElec} น. (${elecAmount}฿)`;
+  if (diffElecEl) diffElecEl.innerText = `${diffElec} น. (${elecAmount.toLocaleString()}฿)`;
 
   const prevWater = Number(document.getElementById(`m-prev-water-${roomNumber}`)?.value || room.lastWaterMeter || 0);
-  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`)?.value || prevWater);
+  const currWaterInput = document.getElementById(`m-curr-water-${roomNumber}`)?.value;
+  const currWater = (currWaterInput !== '' && currWaterInput !== undefined) ? Number(currWaterInput) : prevWater;
   const diffWater = Math.max(0, currWater - prevWater);
   const waterAmount = Math.round(diffWater * waterRate);
   const diffWaterEl = document.getElementById(`m-diff-water-${roomNumber}`);
-  if (diffWaterEl) diffWaterEl.innerText = `${diffWater} น. (${waterAmount}฿)`;
+  if (diffWaterEl) diffWaterEl.innerText = `${diffWater} น. (${waterAmount.toLocaleString()}฿)`;
 
-  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || room.price || 0);
+  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || 0);
   const common = Number(document.getElementById(`m-common-${roomNumber}`)?.value || 0);
   const parking = Number(document.getElementById(`m-parking-${roomNumber}`)?.value || 0);
   const other = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
@@ -743,46 +846,31 @@ function updateMeterRowCalc(roomNumber) {
   const total = rent + common + parking + other + elecAmount + waterAmount;
   const totalEl = document.getElementById(`m-total-${roomNumber}`);
   if (totalEl) totalEl.innerText = `${total.toLocaleString()} ฿`;
-
-  // Sync to card if exists
-  const cardDiffElec = document.getElementById(`card-m-diff-elec-${roomNumber}`);
-  if (cardDiffElec) cardDiffElec.innerText = `${diffElec} หน่วย (${elecAmount} ฿)`;
-  const cardDiffWater = document.getElementById(`card-m-diff-water-${roomNumber}`);
-  if (cardDiffWater) cardDiffWater.innerText = `${diffWater} หน่วย (${waterAmount} ฿)`;
-  const cardTotal = document.getElementById(`card-m-total-${roomNumber}`);
-  if (cardTotal) cardTotal.innerText = `${total.toLocaleString()} ฿`;
 }
 
-function syncMeterCardToRow(roomNumber, type) {
-  if (type === 'elec') {
-    const val = document.getElementById(`card-m-curr-elec-${roomNumber}`).value;
-    const rowInput = document.getElementById(`m-curr-elec-${roomNumber}`);
-    if (rowInput) rowInput.value = val;
-  } else if (type === 'water') {
-    const val = document.getElementById(`card-m-curr-water-${roomNumber}`).value;
-    const rowInput = document.getElementById(`m-curr-water-${roomNumber}`);
-    if (rowInput) rowInput.value = val;
-  }
-  updateMeterRowCalc(roomNumber);
-}
-
-async function createBillFromMeterRow(roomNumber) {
+async function createBillFromCard(roomNumber) {
   const room = state.rooms.find(r => r.number === String(roomNumber));
   if (!room) return;
 
   const month = document.getElementById('meterBillingMonth').value;
-  const currElec = Number(document.getElementById(`m-curr-elec-${roomNumber}`)?.value);
-  const currWater = Number(document.getElementById(`m-curr-water-${roomNumber}`)?.value);
+  const currElecInput = document.getElementById(`card-m-curr-elec-${roomNumber}`)?.value;
+  const currWaterInput = document.getElementById(`card-m-curr-water-${roomNumber}`)?.value;
 
-  if (isNaN(currElec) || currElec === 0) {
+  if (currElecInput === '' || currElecInput === undefined) {
     alert(`กรุณากรอกเลขมิเตอร์ไฟใหม่ของห้อง ${roomNumber}`);
+    document.getElementById(`card-m-curr-elec-${roomNumber}`)?.focus();
     return;
   }
 
-  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || room.price || 0);
-  const commonFee = Number(document.getElementById(`m-common-${roomNumber}`)?.value || 0);
-  const parkingFee = Number(document.getElementById(`m-parking-${roomNumber}`)?.value || 0);
-  const otherFee = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
+  const currElec = Number(currElecInput);
+  const currWater = (currWaterInput !== '' && currWaterInput !== undefined) ? Number(currWaterInput) : (room.lastWaterMeter || 0);
+
+  const rent = Number(document.getElementById(`card-m-rent-${roomNumber}`)?.value || 0);
+  const commonFee = Number(document.getElementById(`card-m-common-${roomNumber}`)?.value || 0);
+  const parkingFee = Number(document.getElementById(`card-m-parking-${roomNumber}`)?.value || 0);
+  const licensePlate = document.getElementById(`card-m-plate-${roomNumber}`)?.value.trim() || '';
+  const otherFee = Number(document.getElementById(`card-m-other-${roomNumber}`)?.value || 0);
+  const otherFeeRemark = document.getElementById(`card-m-remark-${roomNumber}`)?.value.trim() || '';
 
   const billPayload = {
     roomNumber: room.number,
@@ -794,9 +882,9 @@ async function createBillFromMeterRow(roomNumber) {
     currWaterMeter: currWater,
     commonFee: commonFee,
     parkingFee: parkingFee,
-    licensePlate: room.licensePlate || '',
+    licensePlate: licensePlate,
     otherFee: otherFee,
-    otherFeeRemark: room.otherFeeRemark || '',
+    otherFeeRemark: otherFeeRemark,
     electricRate: state.settings.electricRate || 8,
     waterRate: state.settings.waterRate || 18
   };
@@ -809,7 +897,7 @@ async function createBillFromMeterRow(roomNumber) {
     });
     const result = await res.json();
     if (result.success) {
-      alert(`สร้างบิลห้อง ${roomNumber} สำเร็จแล้ว!`);
+      alert(`สร้างบิลห้อง ${roomNumber} เรียบร้อยแล้ว!`);
       await loadBills();
       await loadRooms();
       await loadDashboard();
@@ -822,8 +910,66 @@ async function createBillFromMeterRow(roomNumber) {
   }
 }
 
-async function createBillFromMeterCard(roomNumber) {
-  await createBillFromMeterRow(roomNumber);
+async function createBillFromMeterRow(roomNumber) {
+  const room = state.rooms.find(r => r.number === String(roomNumber));
+  if (!room) return;
+
+  const month = document.getElementById('meterBillingMonth').value;
+  const currElecInput = document.getElementById(`m-curr-elec-${roomNumber}`)?.value;
+  const currWaterInput = document.getElementById(`m-curr-water-${roomNumber}`)?.value;
+
+  if (currElecInput === '' || currElecInput === undefined) {
+    alert(`กรุณากรอกเลขมิเตอร์ไฟใหม่ของห้อง ${roomNumber}`);
+    document.getElementById(`m-curr-elec-${roomNumber}`)?.focus();
+    return;
+  }
+
+  const currElec = Number(currElecInput);
+  const currWater = (currWaterInput !== '' && currWaterInput !== undefined) ? Number(currWaterInput) : (room.lastWaterMeter || 0);
+
+  const rent = Number(document.getElementById(`m-rent-${roomNumber}`)?.value || 0);
+  const commonFee = Number(document.getElementById(`m-common-${roomNumber}`)?.value || 0);
+  const parkingFee = Number(document.getElementById(`m-parking-${roomNumber}`)?.value || 0);
+  const licensePlate = document.getElementById(`m-plate-${roomNumber}`)?.value.trim() || '';
+  const otherFee = Number(document.getElementById(`m-other-${roomNumber}`)?.value || 0);
+  const otherFeeRemark = document.getElementById(`m-remark-${roomNumber}`)?.value.trim() || '';
+
+  const billPayload = {
+    roomNumber: room.number,
+    month: month,
+    rent: rent,
+    prevElectricMeter: room.lastElectricMeter || 0,
+    currElectricMeter: currElec,
+    prevWaterMeter: room.lastWaterMeter || 0,
+    currWaterMeter: currWater,
+    commonFee: commonFee,
+    parkingFee: parkingFee,
+    licensePlate: licensePlate,
+    otherFee: otherFee,
+    otherFeeRemark: otherFeeRemark,
+    electricRate: state.settings.electricRate || 8,
+    waterRate: state.settings.waterRate || 18
+  };
+
+  try {
+    const res = await fetch('/api/bills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(billPayload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      alert(`สร้างบิลห้อง ${roomNumber} เรียบร้อยแล้ว!`);
+      await loadBills();
+      await loadRooms();
+      await loadDashboard();
+      switchTab('bills');
+    } else {
+      alert(`เกิดข้อผิดพลาด: ${result.error}`);
+    }
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 function openMeterModal() {
