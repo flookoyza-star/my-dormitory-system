@@ -346,7 +346,7 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
-// 6. Webhook for LINE Bot (Auto-detects tenant User ID)
+// 6. Webhook for LINE Bot (Auto-registers tenant LINE User ID by Room Number or Name)
 app.post('/api/webhook/line', async (req, res) => {
   // Always reply 200 OK to LINE Webhook quickly
   res.status(200).send('OK');
@@ -360,23 +360,92 @@ app.post('/api/webhook/line', async (req, res) => {
 
   const line = require('@line/bot-sdk');
   const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: token });
+  const baseUrl = getBaseUrl(req);
 
   for (const event of events) {
     if (event.type === 'message' && event.message.type === 'text') {
       const userText = event.message.text.trim();
       const userId = event.source.userId;
 
-      // When a user texts the bot, it tells them their User ID and instructions
-      let replyText = `สวัสดีครับ/ค่ะ!\n\n🔑 LINE User ID ของคุณคือ:\n${userId}\n\n👉 สามารถคัดลอกรหัสนี้แจ้งเจ้าของหอพัก เพื่อเปิดรับบิลค่าเช่าห้องพักอัตโนมัติได้ทันทีครับ`;
+      const rooms = await db.getRooms();
+      const bills = await db.getBills();
 
-      if (userText.toLowerCase().includes('บิล') || userText.includes('ห้อง')) {
-        replyText += `\n\nระบบจะส่งบิลเข้า LINE ของท่านอัตโนมัติเมื่อเจ้าของหอพักออกบิลประจำเดือนครับ`;
+      // Check if user is trying to bind to a room
+      let matchedRoom = null;
+
+      // 1. Try matching by room number:
+      // Handles: "101", "ห้อง 101", "ห้อง101", "Room 101", "room101"
+      const roomNumMatch = userText.match(/(?:ห้อง|room)?\s*([0-9a-zA-Z_-]+)/i);
+      const extractedNumber = roomNumMatch ? roomNumMatch[1] : userText;
+
+      matchedRoom = rooms.find(r => r.number.toLowerCase() === extractedNumber.toLowerCase() || r.number.toLowerCase() === userText.toLowerCase());
+
+      // 2. If not found by number, try matching by tenant name
+      if (!matchedRoom && userText.length >= 2) {
+        matchedRoom = rooms.find(r => {
+          if (!r.tenant || !r.tenant.name) return false;
+          const tenantName = r.tenant.name.toLowerCase();
+          const cleanText = userText.toLowerCase();
+          return tenantName.includes(cleanText) || cleanText.includes(tenantName);
+        });
+      }
+
+      // Check if user was already bound previously
+      const alreadyLinkedRoom = rooms.find(r => r.tenant && r.tenant.lineUserId === userId);
+
+      let replyMessages = [];
+
+      if (matchedRoom) {
+        // Automatically bind this user's LINE User ID to the room!
+        if (!matchedRoom.tenant) {
+          matchedRoom.tenant = {
+            name: 'ผู้เช่าห้อง ' + matchedRoom.number,
+            phone: '',
+            lineUserId: userId,
+            startDate: new Date().toISOString().split('T')[0]
+          };
+          matchedRoom.status = 'occupied';
+        } else {
+          matchedRoom.tenant.lineUserId = userId;
+        }
+
+        await db.saveRoom(matchedRoom);
+
+        let successMsg = `🎉 ผูกบัญชี LINE สำเร็จเรียบร้อย!\n\n🏢 ${settings.dormName || 'หอพัก'}\n🚪 ห้องพัก: ห้อง ${matchedRoom.number}\n👤 ผู้เช่า: ${matchedRoom.tenant.name || 'คุณ'}\n\n✅ ระบบได้บันทึก LINE User ID ของคุณเข้าสู่ห้อง ${matchedRoom.number} เรียบร้อยแล้ว ต่อจากนี้เมื่อเจ้าของหอพักออกบิลประจำเดือน ใบแจ้งหนี้จะถูกส่งเข้ามาในแชทนี้โดยอัตโนมัติครับ`;
+
+        // Check if there is an active pending bill for this room
+        const pendingBill = bills.find(b => b.roomNumber === matchedRoom.number && b.status !== 'paid');
+        if (pendingBill) {
+          successMsg += `\n\n📌 คุณมียอดค้างชำระรอบ ${pendingBill.month}\n💰 ยอดสุทธิ: ${Number(pendingBill.totalAmount).toLocaleString()} บาท\n👉 ดูบิล & สแกน QR โอนเงิน: ${baseUrl}/tenant-portal.html?billId=${pendingBill.id}`;
+        }
+
+        replyMessages.push({ type: 'text', text: successMsg });
+
+      } else if (alreadyLinkedRoom && (userText.includes('บิล') || userText.includes('ยอด') || userText.includes('ค่าเช่า'))) {
+        // User is already linked and asks for their bill
+        const pendingBill = bills.find(b => b.roomNumber === alreadyLinkedRoom.number && b.status !== 'paid');
+        if (pendingBill) {
+          replyMessages.push({
+            type: 'text',
+            text: `📄 ยอดค้างชำระของห้อง ${alreadyLinkedRoom.number} (${pendingBill.month})\n💰 ยอดสุทธิ: ${Number(pendingBill.totalAmount).toLocaleString()} บาท\n📅 กำหนดชำระ: ${pendingBill.dueDate || 'ตามกำหนด'}\n\n👉 ดูบิล & สแกน QR โอนเงิน: ${baseUrl}/tenant-portal.html?billId=${pendingBill.id}`
+          });
+        } else {
+          replyMessages.push({
+            type: 'text',
+            text: `✅ ห้อง ${alreadyLinkedRoom.number} ไม่มีบิลค้างชำระในขณะนี้ครับ ชำระครบถ้วนแล้ว ขอบคุณครับ!`
+          });
+        }
+
+      } else {
+        // Greeting & instructions on how to auto-bind
+        let welcomeMsg = `สวัสดีครับ/ค่ะ! ยินดีต้อนรับสู่ ${settings.dormName || 'ระบบหอพัก'}\n\n👉 เพื่อเปิดรับบิลค่าเช่าห้องพักอัตโนมัติ กรุณาพิมพ์ "เลขห้อง" ของคุณ เช่น:\n"ห้อง 101" หรือ "101"\n(หรือพิมพ์ชื่อ-นามสกุลที่ลงทะเบียนไว้)\n\nระบบจะทำการผูก LINE เข้าห้องพักให้ทันทีครับ!\n\n🔑 รหัส LINE User ID ของคุณคือ:\n${userId}`;
+        replyMessages.push({ type: 'text', text: welcomeMsg });
       }
 
       try {
         await client.replyMessage({
           replyToken: event.replyToken,
-          messages: [{ type: 'text', text: replyText }]
+          messages: replyMessages
         });
       } catch (err) {
         console.error('LINE Reply Error:', err.message);
