@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: dormitory-management-system
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      # Optional: Put your Supabase / Neon PostgreSQL connection string here for permanent cloud DB
+      - key: DATABASE_URL
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+

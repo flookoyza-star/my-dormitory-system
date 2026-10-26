@@ -1,0 +1,6 @@
+node_modules/
+.env
+data/dormitory_data.json
+.DS_Store
+*.log
+
